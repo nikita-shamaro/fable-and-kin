@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useCallback, useEffect } from "react";
+import { useState, useCallback, useEffect, useRef } from "react";
 import storyData from "@/data/story.json";
 
 const CHILD_NAME = "Олег";
@@ -9,13 +9,78 @@ function replaceName(text: string, name: string, placeholder: string): string {
   return text.split(placeholder).join(name);
 }
 
+type AudioState = "idle" | "loading" | "playing" | "paused" | "error";
+
 export default function ReaderPage() {
   const [currentPage, setCurrentPage] = useState(0);
+  const [audioState, setAudioState] = useState<AudioState>("idle");
+
+  // Cache blob URLs so we don't re-fetch audio for pages already visited
+  const audioCache = useRef<Map<number, string>>(new Map());
+  const audioRef = useRef<HTMLAudioElement | null>(null);
 
   const pages = storyData.pages;
   const totalPages = pages.length;
   const page = pages[currentPage];
   const text = replaceName(page.text, CHILD_NAME, storyData.namePlaceholder);
+
+  // Stop audio and reset state when page changes
+  useEffect(() => {
+    if (audioRef.current) {
+      audioRef.current.pause();
+      audioRef.current = null;
+    }
+    setAudioState("idle");
+  }, [currentPage]);
+
+  const handlePlayPause = useCallback(async () => {
+    // If already playing — pause
+    if (audioState === "playing" && audioRef.current) {
+      audioRef.current.pause();
+      setAudioState("paused");
+      return;
+    }
+
+    // If paused — resume
+    if (audioState === "paused" && audioRef.current) {
+      audioRef.current.play();
+      setAudioState("playing");
+      return;
+    }
+
+    // Otherwise fetch audio (or use cache) and play
+    setAudioState("loading");
+
+    try {
+      let blobUrl = audioCache.current.get(currentPage);
+
+      if (!blobUrl) {
+        const res = await fetch("/api/tts", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ text }),
+        });
+
+        if (!res.ok) throw new Error(`TTS request failed: ${res.status}`);
+
+        const blob = await res.blob();
+        blobUrl = URL.createObjectURL(blob);
+        audioCache.current.set(currentPage, blobUrl);
+      }
+
+      const audio = new Audio(blobUrl);
+      audioRef.current = audio;
+
+      audio.onended = () => setAudioState("idle");
+      audio.onerror = () => setAudioState("error");
+
+      await audio.play();
+      setAudioState("playing");
+    } catch (err) {
+      console.error("TTS error:", err);
+      setAudioState("error");
+    }
+  }, [audioState, currentPage, text]);
 
   const goNext = useCallback(() => {
     setCurrentPage((p) => Math.min(p + 1, totalPages - 1));
@@ -30,10 +95,11 @@ export default function ReaderPage() {
     const handleKey = (e: KeyboardEvent) => {
       if (e.key === "ArrowRight" || e.key === "ArrowDown") goNext();
       if (e.key === "ArrowLeft" || e.key === "ArrowUp") goPrev();
+      if (e.key === " ") { e.preventDefault(); handlePlayPause(); }
     };
     window.addEventListener("keydown", handleKey);
     return () => window.removeEventListener("keydown", handleKey);
-  }, [goNext, goPrev]);
+  }, [goNext, goPrev, handlePlayPause]);
 
   const isFirst = currentPage === 0;
   const isLast = currentPage === totalPages - 1;
@@ -49,7 +115,7 @@ export default function ReaderPage() {
         >
           Fable &amp; Kin
         </span>
-        <span className="text-sm text-muted font-ui">
+        <span className="text-sm text-muted">
           {currentPage + 1} / {totalPages}
         </span>
       </header>
@@ -65,7 +131,7 @@ export default function ReaderPage() {
 
         {/* Story text */}
         <p
-          className="text-center text-ink leading-relaxed max-w-xl mx-auto"
+          className="text-center text-ink leading-relaxed max-w-xl mx-auto mb-10"
           style={{
             fontFamily: "var(--font-fraunces), serif",
             fontWeight: 300,
@@ -74,6 +140,47 @@ export default function ReaderPage() {
         >
           {text}
         </p>
+
+        {/* Play / Pause button */}
+        <button
+          onClick={handlePlayPause}
+          disabled={audioState === "loading"}
+          aria-label={audioState === "playing" ? "Пауза" : "Слушать"}
+          className="flex items-center gap-2.5 px-6 py-3 rounded-full border transition-all
+            disabled:opacity-50 disabled:cursor-not-allowed
+            border-amber text-amber hover:bg-amber hover:text-cream active:scale-95"
+        >
+          {audioState === "loading" && (
+            <>
+              <LoadingSpinner />
+              <span className="text-sm font-medium">Загрузка…</span>
+            </>
+          )}
+          {audioState === "playing" && (
+            <>
+              <PauseIcon />
+              <span className="text-sm font-medium">Пауза</span>
+            </>
+          )}
+          {(audioState === "idle" || audioState === "paused") && (
+            <>
+              <PlayIcon />
+              <span className="text-sm font-medium">
+                {audioState === "paused" ? "Продолжить" : "Слушать"}
+              </span>
+            </>
+          )}
+          {audioState === "error" && (
+            <>
+              <PlayIcon />
+              <span className="text-sm font-medium">Повторить</span>
+            </>
+          )}
+        </button>
+
+        {audioState === "error" && (
+          <p className="mt-3 text-xs text-muted">Не удалось загрузить аудио. Проверьте ключ API.</p>
+        )}
       </main>
 
       {/* Navigation */}
@@ -84,7 +191,7 @@ export default function ReaderPage() {
           aria-label="Предыдущая страница"
           className="w-12 h-12 rounded-full border border-border flex items-center justify-center transition-all
             disabled:opacity-25 disabled:cursor-not-allowed
-            hover:not-disabled:border-amber hover:not-disabled:text-amber hover:not-disabled:bg-amber/5
+            hover:border-amber hover:text-amber hover:bg-amber/5
             active:scale-95 text-ink"
         >
           <svg width="20" height="20" viewBox="0 0 20 20" fill="none" aria-hidden>
@@ -114,7 +221,7 @@ export default function ReaderPage() {
           aria-label="Следующая страница"
           className="w-12 h-12 rounded-full border border-border flex items-center justify-center transition-all
             disabled:opacity-25 disabled:cursor-not-allowed
-            hover:not-disabled:border-amber hover:not-disabled:text-amber hover:not-disabled:bg-amber/5
+            hover:border-amber hover:text-amber hover:bg-amber/5
             active:scale-95 text-ink"
         >
           <svg width="20" height="20" viewBox="0 0 20 20" fill="none" aria-hidden>
@@ -123,5 +230,30 @@ export default function ReaderPage() {
         </button>
       </nav>
     </div>
+  );
+}
+
+function PlayIcon() {
+  return (
+    <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor" aria-hidden>
+      <path d="M3 2.5l10 5.5-10 5.5V2.5z"/>
+    </svg>
+  );
+}
+
+function PauseIcon() {
+  return (
+    <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor" aria-hidden>
+      <rect x="3" y="2" width="4" height="12" rx="1"/>
+      <rect x="9" y="2" width="4" height="12" rx="1"/>
+    </svg>
+  );
+}
+
+function LoadingSpinner() {
+  return (
+    <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden className="animate-spin">
+      <circle cx="8" cy="8" r="6" stroke="currentColor" strokeWidth="1.5" strokeDasharray="28" strokeDashoffset="10" strokeLinecap="round"/>
+    </svg>
   );
 }
