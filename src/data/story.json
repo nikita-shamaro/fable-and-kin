@@ -3,6 +3,7 @@
   "language": "ru",
   "ageRange": "4-6",
   "namePlaceholder": "[NAME]",
+  "refrain": "И [NAME] не испугался.",
   "pages": [
     {
       "page": 1,
@@ -11,7 +12,7 @@
     },
     {
       "page": 2,
-      "text": "Однажды ночью [NAME] увидел в темноте яркий свет. Это было перо — золотое, светящееся, тёплое как солнце. Оно лежало прямо у его ног.",
+      "text": "Однажды ночью [NAME] увидел в темноте яркий свет. Это было перо — золотое, светящееся, тёплое как солнце. Оно лежало прямо у его ног. И [NAME] не испугался.",
       "imagePrompt": "A soft watercolour illustration of a single glowing golden feather lying on dark forest moss, radiating warm amber and orange light in the darkness, magical and gentle, children's picture book style"
     },
     {
@@ -26,13 +27,13 @@
     },
     {
       "page": 5,
-      "text": "Вдруг среди деревьев появился свет — яркий, оранжевый, живой. Жар-птица сидела на ветке. [NAME] остановился и замер. Её перья горели как тысяча свечей.",
+      "text": "Вдруг среди деревьев появился свет — яркий, оранжевый, живой. Жар-птица сидела на ветке и смотрела прямо на [NAME]. Её перья горели как тысяча свечей. И [NAME] не испугался.",
       "imagePrompt": "A soft watercolour illustration of a magnificent firebird perched on a branch in an enchanted forest, feathers glowing in brilliant orange gold and red, illuminating the surrounding trees, looking gently at a small boy below, magical and warm, children's picture book style"
     },
     {
       "page": 6,
-      "text": "«Зачем ты пришёл?» — спросила Жар-птица мягким голосом. «Я хочу, чтобы моя семья всегда была счастлива,» — сказал [NAME] смело и честно.",
-      "imagePrompt": "A soft watercolour illustration of a small boy looking up at a glowing firebird in a magical forest, the bird bending its head toward him gently as if listening, warm golden light surrounding them both, tender and magical, children's picture book style"
+      "text": "«Зачем ты пришёл?» — спросила Жар-птица мягким голосом. [NAME] сделал шаг вперёд. «Я хочу, чтобы моя семья всегда была счастлива,» — сказал он честно. И [NAME] не испугался.",
+      "imagePrompt": "A soft watercolour illustration of a small boy taking a step toward a glowing firebird in a magical forest, the bird bending its head toward him gently as if listening, warm golden light surrounding them both, tender and magical, children's picture book style"
     },
     {
       "page": 7,
