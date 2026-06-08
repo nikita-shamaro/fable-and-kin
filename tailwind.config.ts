@@ -9,8 +9,19 @@ const config: Config = {
   theme: {
     extend: {
       colors: {
-        background: "var(--background)",
-        foreground: "var(--foreground)",
+        ink:    "#1C1612",
+        amber:  "#C47B45",
+        sand:   "#E8A96A",
+        peach:  "#F4D4B0",
+        cream:  "#F7F0E6",
+        cream2: "#EFE6D8",
+        sage:   "#3D7A6A",
+        muted:  "#9B8878",
+        border: "#E2D8CC",
+      },
+      fontFamily: {
+        display: ["var(--font-fraunces)", "serif"],
+        ui:      ["var(--font-plus-jakarta)", "sans-serif"],
       },
     },
   },
