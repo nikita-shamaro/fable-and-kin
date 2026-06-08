@@ -22,12 +22,12 @@
     },
     {
       "page": 4,
-      "text": "Утром [NAME] вошёл в волшебный лес. Деревья были высокими и добрыми. Белочки и зайцы смотрели с любопытством. Лес приветствовал [NAME].",
+      "text": "Утром [NAME] вошёл в волшебный лес. Деревья были высокими и добрыми. Белочки и зайцы смотрели с любопытством. [NAME] чувствовал — лес рад ему.",
       "imagePrompt": "A soft watercolour illustration of a small boy walking into a magical Russian forest in early morning light, tall gentle pine trees on either side, friendly squirrels and rabbits watching from branches and roots, golden morning light filtering through, children's picture book style"
     },
     {
       "page": 5,
-      "text": "Вдруг среди деревьев появился свет — яркий, оранжевый, живой. Жар-птица сидела на ветке и смотрела прямо на [NAME]. Её перья горели как тысяча свечей. И [NAME] не испугался.",
+      "text": "Вдруг среди деревьев появился свет — яркий, оранжевый, живой. Жар-птица сидела на ветке. [NAME] замер — она смотрела прямо на него. Её перья горели как тысяча свечей. И [NAME] не испугался.",
       "imagePrompt": "A soft watercolour illustration of a magnificent firebird perched on a branch in an enchanted forest, feathers glowing in brilliant orange gold and red, illuminating the surrounding trees, looking gently at a small boy below, magical and warm, children's picture book style"
     },
     {
