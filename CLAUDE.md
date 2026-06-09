@@ -14,35 +14,47 @@ This is not a language learning app. It is about a child being able to speak to 
 - Deployed to Vercel at fable-and-kin.vercel.app
 - GitHub repo: github.com/nikita-shamaro/fable-and-kin
 - Russian firebird story complete — 8 pages stored in src/data/story.json with courage refrain
-- Full-screen reader built at /reader with page-turn navigation, brand fonts and colours
-- Audio narration via ElevenLabs (eleven_multilingual_v2, voice N8lIVPsFkvOoqev5Csxo) — swapped from OpenAI TTS
+- Full reader built at /reader — cover page, 8 story pages, completion screen («Конец»)
+- Audio narration via ElevenLabs (eleven_multilingual_v2, voice N8lIVPsFkvOoqev5Csxo)
 - Audio files permanently cached in Supabase Storage: bucket `audio`, path `firebird/page-{N}.mp3`
 - API route at /api/tts checks Supabase first, generates and uploads only if not already stored
-- Auto-advancing pages: audio plays through all 8 pages continuously, stops at the end
-- Word-by-word highlighting implemented and working:
-  - Timestamps generated via scripts/generate-timestamps.ts (OpenAI Whisper, word-level), stored in src/data/timestamps.json
-  - Highlight tracks audio via requestAnimationFrame (~60fps) — no timeupdate drift
-  - Proportional timestamp mapping: scales audio.currentTime onto Whisper's timeline to correct for duration mismatch between ElevenLabs output and Whisper transcription
-  - Active word lookup is pure timestamp-based (no string matching) — always advances with time
-  - Style: soft peach (#F4D4B0) background cloud on current word, 200ms fade in / 350ms fade out, text stays ink
+- Auto-advancing pages: audio plays through all 8 pages continuously, triggers completion screen at end
+- Dual-level highlighting implemented and working:
+  - Word level: amber #C47B45 background, border-radius 4px, cream text — tracks audio via rAF at ~60fps
+  - Sentence level: soft peach rgba(244,212,176,0.5) bubble around the active sentence, border-radius 12px
+  - Timestamps generated via scripts/generate-timestamps.ts (OpenAI Whisper), stored in src/data/timestamps.json
+  - Proportional timestamp mapping corrects ElevenLabs/Whisper duration mismatch
+- Page transition animations:
+  - Standard page turns: scale-fade, opacity + scale(0.98→1), 200ms ease
+  - Cover → story: theatrical curtain-rise — cover slides down (translateY 60px, 500ms ease-in), 100ms pause, page rises from -30px (500ms ease-out)
+  - Same curtain animation for story → completion screen and completion → cover
+- Reader layout: full viewport (100dvh), no scroll — card fills available height
+- Page-within-card layout: white #FFFFFF card, 0.5px border #E2D8CC, soft box-shadow, border-radius 16px, cream outer background
+- Illustration support: page 1 loads /public/images/page-1.png at top 45% of card (object-fit cover); pages 2–8 show text-only layout
+- Header: 3-column grid — wordmark left, story title centred (Fraunces 300, 0.75rem, muted), page counter right
+- Nav: dot indicators (6–8px), arrow buttons, hidden on cover and completion screen
 
 ## Next Session Goal
-- Test and validate word highlighting sync across all 8 pages; tune if needed
-- Identify and fix grammatical issue on one page
+- Generate remaining 7 illustrations in Midjourney using page-1.png as --sref style reference
+- Place as /public/images/page-2.png through page-8.png and wire up in reader
+- Build name input screen (before reader): child's name field, gender selector, age band selector
+- Name input routes to reader and injects name into story text and audio
 
-## Known Issues / Pre-Demo Tasks
-- Word highlighting sync needs testing across all 8 pages — may need per-page tuning
-- Grammatical issue on one page — to be identified and fixed
+## Known Issues / Notes
+- Word highlighting sync should be validated across all 8 pages — may need per-page tuning
+- Illustration style reference: public/images/page-1.png — use --sref in Midjourney for consistency across all 8 pages
 
 ## MVP Scope (Build This First)
-1. A static Russian-language story (folklore world — firebird, enchanted forest)
-2. Child's name inserted dynamically into the story text and narration
-3. Page-turn reading experience
-4. Russian audio narration via OpenAI TTS (generated once, cached)
-5. Word-by-word highlighting synced to audio
-6. One age band: 4-6 year olds
+1. ✅ A static Russian-language story (folklore world — firebird, enchanted forest)
+2. Child's name inserted dynamically into the story text and narration (hardcoded to «Олег» for now)
+3. ✅ Page-turn reading experience with cover and completion screen
+4. ✅ Russian audio narration via ElevenLabs (generated once, cached in Supabase)
+5. ✅ Word-by-word and sentence highlighting synced to audio
+6. ✅ One age band: 4-6 year olds
+7. Illustrations for all 8 pages (page 1 done — 7 remaining)
+8. Name input screen before reader (child name, gender, age band)
 
-Do NOT build: user accounts, library, book creation wizard, payments, language toggle, or any generation pipeline yet. Reading experience and audio first.
+Do NOT build yet: user accounts, library, payments, language toggle, or AI generation pipeline.
 
 ## Tech Stack
 - Framework: Next.js 14 with App Router and TypeScript
