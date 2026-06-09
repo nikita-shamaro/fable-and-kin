@@ -55,7 +55,7 @@ function activeIndexAt(words: WordTiming[], scaledT: number): number {
 }
 
 export default function ReaderPage() {
-  const [currentPage, setCurrentPage] = useState(0);
+  const [currentPage, setCurrentPage] = useState(-1); // -1 = cover
   const [audioState, setAudioState] = useState<AudioState>("idle");
   const [activeWordIdx, setActiveWordIdx] = useState<number>(-1);
   const [pageVisible, setPageVisible] = useState(true);
@@ -87,8 +87,9 @@ export default function ReaderPage() {
 
   const pages = storyData.pages;
   const totalPages = pages.length;
-  const page = pages[currentPage];
-  const text = replaceName(page.text, CHILD_NAME, storyData.namePlaceholder);
+  const isCover = currentPage === -1;
+  const page = isCover ? null : pages[currentPage];
+  const text = page ? replaceName(page.text, CHILD_NAME, storyData.namePlaceholder) : "";
   const tokens = useMemo(() => splitTokens(text), [text]);
 
   const sentenceRanges = useMemo(() => {
@@ -105,6 +106,7 @@ export default function ReaderPage() {
 
   // Load Whisper words for the current page
   useEffect(() => {
+    if (currentPage === -1) return;
     const pageTimings = (timestampData.pages as { page: number; words: WordTiming[] }[])
       .find((p) => p.page === currentPage + 1);
     if (pageTimings && pageTimings.words.length > 0) {
@@ -242,29 +244,32 @@ export default function ReaderPage() {
   }, [audioState, currentPage, text, playPage]);
 
   const goNext = useCallback(() => {
+    if (isCover) return;
     const next = Math.min(currentPage + 1, totalPages - 1);
     if (next !== currentPage) navigateToPage(next);
-  }, [currentPage, totalPages, navigateToPage]);
+  }, [isCover, currentPage, totalPages, navigateToPage]);
 
   const goPrev = useCallback(() => {
+    if (isCover) return;
     const prev = Math.max(currentPage - 1, 0);
     if (prev !== currentPage) navigateToPage(prev);
-  }, [currentPage, navigateToPage]);
+  }, [isCover, currentPage, navigateToPage]);
 
-  // Keyboard navigation
+  // Keyboard navigation (disabled on cover)
   useEffect(() => {
     const handleKey = (e: KeyboardEvent) => {
+      if (isCover) return;
       if (e.key === "ArrowRight" || e.key === "ArrowDown") goNext();
       if (e.key === "ArrowLeft" || e.key === "ArrowUp") goPrev();
       if (e.key === " ") { e.preventDefault(); handlePlayPause(); }
     };
     window.addEventListener("keydown", handleKey);
     return () => window.removeEventListener("keydown", handleKey);
-  }, [goNext, goPrev, handlePlayPause]);
+  }, [isCover, goNext, goPrev, handlePlayPause]);
 
   const isFirst = currentPage === 0;
   const isLast = currentPage === totalPages - 1;
-  const hasTimings = whisperWordsRef.current.length > 0;
+  const hasTimings = !isCover && whisperWordsRef.current.length > 0;
 
   return (
     <div className="min-h-screen bg-cream flex flex-col" style={{ fontFamily: "var(--font-plus-jakarta), sans-serif" }}>
@@ -278,7 +283,7 @@ export default function ReaderPage() {
           Fable &amp; Kin
         </span>
         <span className="text-sm text-muted">
-          {currentPage + 1} / {totalPages}
+          {isCover ? "" : `${currentPage + 1} / ${totalPages}`}
         </span>
       </header>
 
@@ -291,117 +296,173 @@ export default function ReaderPage() {
           transition: "opacity 200ms ease, transform 200ms ease",
         }}
       >
-        {/* Page number pill */}
-        <div className="mb-8">
-          <span className="text-xs font-medium tracking-widest uppercase text-amber px-4 py-1.5 rounded-full border border-amber/30 bg-amber/5">
-            Страница {currentPage + 1}
-          </span>
-        </div>
+        {isCover ? (
+          /* ── Cover page ── */
+          <div className="flex flex-col items-center text-center max-w-sm mx-auto">
+            <p
+              className="text-muted mb-3 tracking-widest uppercase"
+              style={{
+                fontFamily: "var(--font-fraunces), serif",
+                fontWeight: 300,
+                fontSize: "clamp(0.7rem, 2vw, 0.85rem)",
+                letterSpacing: "0.2em",
+              }}
+            >
+              Русские сказки
+            </p>
 
-        {/* Story text — word spans when timings available, plain text otherwise */}
-        <p
-          className="text-center text-ink leading-relaxed max-w-xl mx-auto mb-10"
-          style={{
-            fontFamily: "var(--font-fraunces), serif",
-            fontWeight: 300,
-            fontSize: "clamp(1.25rem, 4vw, 1.75rem)",
-          }}
-        >
-          {hasTimings ? (
-            sentenceRanges.map((range, sIdx) => {
-              const isActiveSentence = sIdx === activeSentenceIdx;
-              return (
-                <span
-                  key={sIdx}
-                  style={{
-                    backgroundColor: isActiveSentence
-                      ? "rgba(244, 212, 176, 0.5)"
-                      : "transparent",
-                    borderRadius: "12px",
-                    padding: "4px 8px",
-                    transition: isActiveSentence
-                      ? "background-color 200ms ease"
-                      : "background-color 300ms ease",
-                    display: "inline",
-                    boxDecorationBreak: "clone",
-                    WebkitBoxDecorationBreak: "clone",
-                  } as React.CSSProperties}
-                >
-                  {range.start > 0 ? " " : ""}
-                  {tokens.slice(range.start, range.end).map((token, localIdx) => {
-                    const globalIdx = range.start + localIdx;
-                    const isActive = globalIdx === activeWordIdx;
-                    return (
-                      <span key={globalIdx}>
-                        <span
-                          style={{
-                            backgroundColor: isActive ? "#C47B45" : "transparent",
-                            color: isActive ? "#F7F0E6" : "#1C1612",
-                            borderRadius: "4px",
-                            padding: "1px 4px",
-                            transition: isActive
-                              ? "background-color 200ms ease, color 200ms ease"
-                              : "background-color 350ms ease, color 350ms ease",
-                          }}
-                        >
-                          {token}
-                        </span>
-                        {localIdx < range.end - range.start - 1 ? " " : ""}
-                      </span>
-                    );
-                  })}
-                </span>
-              );
-            })
-          ) : (
-            text
-          )}
-        </p>
+            <h1
+              className="text-ink mb-8 leading-tight"
+              style={{
+                fontFamily: "var(--font-fraunces), serif",
+                fontWeight: 300,
+                fontSize: "clamp(1.75rem, 6vw, 2.75rem)",
+              }}
+            >
+              {replaceName(storyData.title, CHILD_NAME, storyData.namePlaceholder)}
+            </h1>
 
-        {/* Play / Pause button */}
-        <button
-          onClick={handlePlayPause}
-          disabled={audioState === "loading"}
-          aria-label={audioState === "playing" ? "Пауза" : "Слушать"}
-          className="flex items-center gap-2.5 px-6 py-3 rounded-full border transition-all
-            disabled:opacity-50 disabled:cursor-not-allowed
-            border-amber text-amber hover:bg-amber hover:text-cream active:scale-95"
-        >
-          {audioState === "loading" && (
-            <>
-              <LoadingSpinner />
-              <span className="text-sm font-medium">Загрузка…</span>
-            </>
-          )}
-          {audioState === "playing" && (
-            <>
-              <PauseIcon />
-              <span className="text-sm font-medium">Пауза</span>
-            </>
-          )}
-          {(audioState === "idle" || audioState === "paused") && (
-            <>
-              <PlayIcon />
-              <span className="text-sm font-medium">
-                {audioState === "paused" ? "Продолжить" : "Слушать"}
+            {/* Amber divider */}
+            <div
+              className="mb-10"
+              style={{
+                width: "48px",
+                height: "1px",
+                backgroundColor: "#C47B45",
+                opacity: 0.6,
+              }}
+            />
+
+            <button
+              onClick={() => navigateToPage(0)}
+              className="px-8 py-3 rounded-full text-sm font-medium tracking-wide transition-all active:scale-95"
+              style={{
+                backgroundColor: "#C47B45",
+                color: "#F7F0E6",
+                border: "none",
+              }}
+              onMouseEnter={(e) => (e.currentTarget.style.opacity = "0.88")}
+              onMouseLeave={(e) => (e.currentTarget.style.opacity = "1")}
+            >
+              Начать читать
+            </button>
+          </div>
+        ) : (
+          /* ── Story pages ── */
+          <>
+            {/* Page number pill */}
+            <div className="mb-8">
+              <span className="text-xs font-medium tracking-widest uppercase text-amber px-4 py-1.5 rounded-full border border-amber/30 bg-amber/5">
+                Страница {currentPage + 1}
               </span>
-            </>
-          )}
-          {audioState === "error" && (
-            <>
-              <PlayIcon />
-              <span className="text-sm font-medium">Повторить</span>
-            </>
-          )}
-        </button>
+            </div>
 
-        {audioState === "error" && (
-          <p className="mt-3 text-xs text-muted">Не удалось загрузить аудио. Проверьте настройки.</p>
+            {/* Story text */}
+            <p
+              className="text-center text-ink leading-relaxed max-w-xl mx-auto mb-10"
+              style={{
+                fontFamily: "var(--font-fraunces), serif",
+                fontWeight: 300,
+                fontSize: "clamp(1.25rem, 4vw, 1.75rem)",
+              }}
+            >
+              {hasTimings ? (
+                sentenceRanges.map((range, sIdx) => {
+                  const isActiveSentence = sIdx === activeSentenceIdx;
+                  return (
+                    <span
+                      key={sIdx}
+                      style={{
+                        backgroundColor: isActiveSentence
+                          ? "rgba(244, 212, 176, 0.5)"
+                          : "transparent",
+                        borderRadius: "12px",
+                        padding: "4px 8px",
+                        transition: isActiveSentence
+                          ? "background-color 200ms ease"
+                          : "background-color 300ms ease",
+                        display: "inline",
+                        boxDecorationBreak: "clone",
+                        WebkitBoxDecorationBreak: "clone",
+                      } as React.CSSProperties}
+                    >
+                      {range.start > 0 ? " " : ""}
+                      {tokens.slice(range.start, range.end).map((token, localIdx) => {
+                        const globalIdx = range.start + localIdx;
+                        const isActive = globalIdx === activeWordIdx;
+                        return (
+                          <span key={globalIdx}>
+                            <span
+                              style={{
+                                backgroundColor: isActive ? "#C47B45" : "transparent",
+                                color: isActive ? "#F7F0E6" : "#1C1612",
+                                borderRadius: "4px",
+                                padding: "1px 4px",
+                                transition: isActive
+                                  ? "background-color 200ms ease, color 200ms ease"
+                                  : "background-color 350ms ease, color 350ms ease",
+                              }}
+                            >
+                              {token}
+                            </span>
+                            {localIdx < range.end - range.start - 1 ? " " : ""}
+                          </span>
+                        );
+                      })}
+                    </span>
+                  );
+                })
+              ) : (
+                text
+              )}
+            </p>
+
+            {/* Play / Pause button */}
+            <button
+              onClick={handlePlayPause}
+              disabled={audioState === "loading"}
+              aria-label={audioState === "playing" ? "Пауза" : "Слушать"}
+              className="flex items-center gap-2.5 px-6 py-3 rounded-full border transition-all
+                disabled:opacity-50 disabled:cursor-not-allowed
+                border-amber text-amber hover:bg-amber hover:text-cream active:scale-95"
+            >
+              {audioState === "loading" && (
+                <>
+                  <LoadingSpinner />
+                  <span className="text-sm font-medium">Загрузка…</span>
+                </>
+              )}
+              {audioState === "playing" && (
+                <>
+                  <PauseIcon />
+                  <span className="text-sm font-medium">Пауза</span>
+                </>
+              )}
+              {(audioState === "idle" || audioState === "paused") && (
+                <>
+                  <PlayIcon />
+                  <span className="text-sm font-medium">
+                    {audioState === "paused" ? "Продолжить" : "Слушать"}
+                  </span>
+                </>
+              )}
+              {audioState === "error" && (
+                <>
+                  <PlayIcon />
+                  <span className="text-sm font-medium">Повторить</span>
+                </>
+              )}
+            </button>
+
+            {audioState === "error" && (
+              <p className="mt-3 text-xs text-muted">Не удалось загрузить аудио. Проверьте настройки.</p>
+            )}
+          </>
         )}
       </main>
 
-      {/* Navigation */}
-      <nav className="flex items-center justify-center gap-6 px-6 py-8 border-t border-border">
+      {/* Navigation — hidden on cover */}
+      <nav className={`flex items-center justify-center gap-6 px-6 py-8 border-t border-border transition-opacity duration-200 ${isCover ? "opacity-0 pointer-events-none" : "opacity-100"}`}>
         <button
           onClick={goPrev}
           disabled={isFirst}
