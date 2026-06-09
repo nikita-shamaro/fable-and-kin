@@ -1,7 +1,8 @@
 "use client";
 
-import { useState, useCallback, useEffect, useRef } from "react";
+import { useState, useCallback, useEffect, useRef, useMemo } from "react";
 import storyData from "@/data/story.json";
+import timestampData from "@/data/timestamps.json";
 
 const CHILD_NAME = "Олег";
 
@@ -11,17 +12,72 @@ function replaceName(text: string, name: string, placeholder: string): string {
 
 type AudioState = "idle" | "loading" | "playing" | "paused" | "error";
 
+interface WordTiming {
+  word: string;
+  start: number;
+  end: number;
+}
+
+// Split display text into tokens on whitespace boundaries.
+// Punctuation stays attached to its token (e.g. "птицы,").
+function splitTokens(text: string): string[] {
+  return text.split(/\s+/).filter(Boolean);
+}
+
+// Strip leading/trailing Cyrillic-text punctuation for word matching.
+function bareWord(token: string): string {
+  return token.replace(/^[«"'(—–]+|[»"').,!?:;—–]+$/g, "").toLowerCase();
+}
+
+// Map display tokens to Whisper word timings by sequential normalized matching.
+// Returns an array parallel to tokens; unmatched tokens get null.
+function buildTimingMap(
+  tokens: string[],
+  whisperWords: WordTiming[]
+): Array<WordTiming | null> {
+  const map: Array<WordTiming | null> = new Array(tokens.length).fill(null);
+  let wi = 0;
+  for (let ti = 0; ti < tokens.length; ti++) {
+    const bare = bareWord(tokens[ti]);
+    if (!bare) continue;
+    while (wi < whisperWords.length) {
+      const wBare = bareWord(whisperWords[wi].word);
+      if (wBare === bare || bare.startsWith(wBare) || wBare.startsWith(bare)) {
+        map[ti] = whisperWords[wi];
+        wi++;
+        break;
+      }
+      // Whisper split differently — advance whisper pointer and try next
+      wi++;
+    }
+  }
+  return map;
+}
+
 export default function ReaderPage() {
   const [currentPage, setCurrentPage] = useState(0);
   const [audioState, setAudioState] = useState<AudioState>("idle");
+  const [activeWordIdx, setActiveWordIdx] = useState<number>(-1);
 
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const autoAdvancing = useRef(false);
+  const timingMapRef = useRef<Array<WordTiming | null>>([]);
 
   const pages = storyData.pages;
   const totalPages = pages.length;
   const page = pages[currentPage];
   const text = replaceName(page.text, CHILD_NAME, storyData.namePlaceholder);
+  const tokens = useMemo(() => splitTokens(text), [text]);
+
+  // Build timing map whenever page or tokens change
+  useEffect(() => {
+    const pageTimings = (timestampData.pages as { page: number; words: WordTiming[] }[])
+      .find((p) => p.page === currentPage + 1);
+    timingMapRef.current = pageTimings
+      ? buildTimingMap(tokens, pageTimings.words)
+      : new Array(tokens.length).fill(null);
+    setActiveWordIdx(-1);
+  }, [currentPage, tokens]);
 
   // Stop audio when the page changes (unless we're auto-advancing)
   useEffect(() => {
@@ -31,10 +87,10 @@ export default function ReaderPage() {
     }
     if (!autoAdvancing.current) {
       setAudioState("idle");
+      setActiveWordIdx(-1);
     }
   }, [currentPage]);
 
-  // Fetch the permanent Supabase URL for a page (generates + stores if needed)
   const fetchAudioUrl = useCallback(async (pageIndex: number, pageText: string): Promise<string> => {
     const res = await fetch("/api/tts", {
       method: "POST",
@@ -56,7 +112,20 @@ export default function ReaderPage() {
       const audio = new Audio(url);
       audioRef.current = audio;
 
+      audio.addEventListener("timeupdate", () => {
+        const t = audio.currentTime;
+        const map = timingMapRef.current;
+        // Find the last word whose start <= currentTime
+        let idx = -1;
+        for (let i = 0; i < map.length; i++) {
+          const timing = map[i];
+          if (timing && timing.start <= t) idx = i;
+        }
+        setActiveWordIdx(idx);
+      });
+
       audio.onended = () => {
+        setActiveWordIdx(-1);
         const isLastPage = pageIndex >= totalPages - 1;
         if (isLastPage) {
           autoAdvancing.current = false;
@@ -70,6 +139,7 @@ export default function ReaderPage() {
       audio.onerror = () => {
         autoAdvancing.current = false;
         setAudioState("error");
+        setActiveWordIdx(-1);
       };
 
       await audio.play();
@@ -130,6 +200,7 @@ export default function ReaderPage() {
 
   const isFirst = currentPage === 0;
   const isLast = currentPage === totalPages - 1;
+  const hasTimings = timingMapRef.current.some(Boolean);
 
   return (
     <div className="min-h-screen bg-cream flex flex-col" style={{ fontFamily: "var(--font-plus-jakarta), sans-serif" }}>
@@ -156,7 +227,7 @@ export default function ReaderPage() {
           </span>
         </div>
 
-        {/* Story text */}
+        {/* Story text — word spans when timings available, plain text otherwise */}
         <p
           className="text-center text-ink leading-relaxed max-w-xl mx-auto mb-10"
           style={{
@@ -165,7 +236,23 @@ export default function ReaderPage() {
             fontSize: "clamp(1.25rem, 4vw, 1.75rem)",
           }}
         >
-          {text}
+          {hasTimings ? (
+            tokens.map((token, i) => (
+              <span key={i}>
+                <span
+                  style={{
+                    color: i === activeWordIdx ? "#C47B45" : "#1C1612",
+                    transition: "color 350ms ease",
+                  }}
+                >
+                  {token}
+                </span>
+                {i < tokens.length - 1 ? " " : ""}
+              </span>
+            ))
+          ) : (
+            text
+          )}
         </p>
 
         {/* Play / Pause button */}
