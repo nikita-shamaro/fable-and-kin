@@ -15,17 +15,23 @@ This is not a language learning app. It is about a child being able to speak to 
 - GitHub repo: github.com/nikita-shamaro/fable-and-kin
 - Russian firebird story complete — 8 pages stored in src/data/story.json with courage refrain
 - Full-screen reader built at /reader with page-turn navigation, brand fonts and colours
-- Audio narration working via OpenAI TTS (tts-1, alloy voice)
+- Audio narration via ElevenLabs (eleven_multilingual_v2, voice N8lIVPsFkvOoqev5Csxo) — swapped from OpenAI TTS
 - Audio files permanently cached in Supabase Storage: bucket `audio`, path `firebird/page-{N}.mp3`
 - API route at /api/tts checks Supabase first, generates and uploads only if not already stored
 - Auto-advancing pages: audio plays through all 8 pages continuously, stops at the end
-- Progressive in-memory prefetch removed — Supabase CDN handles delivery
+- Word-by-word highlighting implemented and working:
+  - Timestamps generated via scripts/generate-timestamps.ts (OpenAI Whisper, word-level), stored in src/data/timestamps.json
+  - Highlight tracks audio via requestAnimationFrame (~60fps) — no timeupdate drift
+  - Proportional timestamp mapping: scales audio.currentTime onto Whisper's timeline to correct for duration mismatch between ElevenLabs output and Whisper transcription
+  - Active word lookup is pure timestamp-based (no string matching) — always advances with time
+  - Style: soft peach (#F4D4B0) background cloud on current word, 200ms fade in / 350ms fade out, text stays ink
 
 ## Next Session Goal
-- Word-by-word highlighting synced to audio, with fade transition, using Whisper timestamps
+- Test and validate word highlighting sync across all 8 pages; tune if needed
+- Identify and fix grammatical issue on one page
 
 ## Known Issues / Pre-Demo Tasks
-- Swap alloy TTS voice for ElevenLabs voice before demo
+- Word highlighting sync needs testing across all 8 pages — may need per-page tuning
 - Grammatical issue on one page — to be identified and fixed
 
 ## MVP Scope (Build This First)
