@@ -59,6 +59,8 @@ export default function ReaderPage() {
   const [audioState, setAudioState] = useState<AudioState>("idle");
   const [activeWordIdx, setActiveWordIdx] = useState<number>(-1);
   const [pageVisible, setPageVisible] = useState(true);
+  // 'idle' | 'exiting' | 'entering-prep' | 'entering'
+  const [curtainPhase, setCurtainPhase] = useState<"idle" | "exiting" | "entering-prep" | "entering">("idle");
 
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const autoAdvancing = useRef(false);
@@ -84,6 +86,27 @@ export default function ReaderPage() {
     }, 200);
     return () => clearTimeout(t);
   }, [pageVisible]);
+
+  // Theatrical curtain-rise transition for cover → page 1.
+  // Phase sequence: exiting (500ms) → 100ms pause → entering-prep (0ms paint)
+  // → entering (500ms) → idle.
+  const startCurtain = useCallback(() => {
+    setCurtainPhase("exiting");
+    const t1 = setTimeout(() => {
+      setCurrentPage(0);
+      setCurtainPhase("entering-prep");
+      // Double rAF ensures the browser paints the -30px/opacity-0 state
+      // before starting the entrance transition.
+      requestAnimationFrame(() => {
+        requestAnimationFrame(() => {
+          setCurtainPhase("entering");
+          const t2 = setTimeout(() => setCurtainPhase("idle"), 500);
+          return () => clearTimeout(t2);
+        });
+      });
+    }, 600); // 500ms exit + 100ms pause
+    return () => clearTimeout(t1);
+  }, []);
 
   const pages = storyData.pages;
   const totalPages = pages.length;
@@ -290,11 +313,19 @@ export default function ReaderPage() {
       {/* Main reading area */}
       <main
         className="flex-1 flex flex-col items-center justify-center px-6 py-12"
-        style={{
-          opacity: pageVisible ? 1 : 0,
-          transform: pageVisible ? "scale(1)" : "scale(0.98)",
-          transition: "opacity 200ms ease, transform 200ms ease",
-        }}
+        style={
+          curtainPhase === "exiting"
+            ? { opacity: 0, transform: "translateY(60px)", transition: "opacity 500ms ease-in, transform 500ms ease-in" }
+            : curtainPhase === "entering-prep"
+            ? { opacity: 0, transform: "translateY(-30px)", transition: "none" }
+            : curtainPhase === "entering"
+            ? { opacity: 1, transform: "translateY(0)", transition: "opacity 500ms ease-out, transform 500ms ease-out" }
+            : {
+                opacity: pageVisible ? 1 : 0,
+                transform: pageVisible ? "scale(1)" : "scale(0.98)",
+                transition: "opacity 200ms ease, transform 200ms ease",
+              }
+        }
       >
         {isCover ? (
           /* ── Cover page ── */
@@ -334,7 +365,7 @@ export default function ReaderPage() {
             />
 
             <button
-              onClick={() => navigateToPage(0)}
+              onClick={startCurtain}
               className="px-8 py-3 rounded-full text-sm font-medium tracking-wide transition-all active:scale-95"
               style={{
                 backgroundColor: "#C47B45",
