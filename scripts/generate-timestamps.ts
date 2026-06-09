@@ -17,11 +17,27 @@ import os from "os";
 import OpenAI, { toFile } from "openai";
 import storyData from "../src/data/story.json";
 
+console.log("=== generate-timestamps starting ===");
+console.log("Node version:", process.version);
+console.log("Working directory:", process.cwd());
+
 const OPENAI_API_KEY = process.env.OPENAI_API_KEY;
 const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL;
 
-if (!OPENAI_API_KEY) throw new Error("OPENAI_API_KEY is not set");
-if (!SUPABASE_URL) throw new Error("NEXT_PUBLIC_SUPABASE_URL is not set");
+console.log("OPENAI_API_KEY present:", !!OPENAI_API_KEY);
+console.log("NEXT_PUBLIC_SUPABASE_URL present:", !!SUPABASE_URL);
+console.log("Pages to process:", storyData.pages.length);
+
+if (!OPENAI_API_KEY) {
+  console.error("ERROR: OPENAI_API_KEY is not set");
+  console.error("Run with: OPENAI_API_KEY=sk-... npm run generate-timestamps");
+  process.exit(1);
+}
+if (!SUPABASE_URL) {
+  console.error("ERROR: NEXT_PUBLIC_SUPABASE_URL is not set");
+  console.error("Run with: NEXT_PUBLIC_SUPABASE_URL=https://... npm run generate-timestamps");
+  process.exit(1);
+}
 
 const openai = new OpenAI({ apiKey: OPENAI_API_KEY });
 
