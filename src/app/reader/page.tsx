@@ -15,21 +15,15 @@ export default function ReaderPage() {
   const [currentPage, setCurrentPage] = useState(0);
   const [audioState, setAudioState] = useState<AudioState>("idle");
 
-  // blob URL cache — keyed by page index
-  const audioCache = useRef<Map<number, string>>(new Map());
-  // tracks which pages have an in-flight prefetch so we never double-fetch
-  const prefetching = useRef<Set<number>>(new Set());
   const audioRef = useRef<HTMLAudioElement | null>(null);
+  const autoAdvancing = useRef(false);
 
   const pages = storyData.pages;
   const totalPages = pages.length;
   const page = pages[currentPage];
   const text = replaceName(page.text, CHILD_NAME, storyData.namePlaceholder);
 
-  // When page changes, stop any current audio.
-  // If autoAdvancing, the play effect will fire next; otherwise reset to idle.
-  const autoAdvancing = useRef(false);
-
+  // Stop audio when the page changes (unless we're auto-advancing)
   useEffect(() => {
     if (audioRef.current) {
       audioRef.current.pause();
@@ -40,76 +34,26 @@ export default function ReaderPage() {
     }
   }, [currentPage]);
 
-  // Silently fetch and cache a page's audio in the background.
-  // Stored in a ref so it is always the latest version without needing to be
-  // listed as a dependency in page-change effects (avoids stale-closure skips).
-  const prefetchPage = useRef(async (pageIndex: number) => {
-    if (
-      pageIndex < 0 ||
-      pageIndex >= totalPages ||
-      audioCache.current.has(pageIndex) ||
-      prefetching.current.has(pageIndex)
-    ) return;
-
-    prefetching.current.add(pageIndex);
-    try {
-      const pageText = replaceName(
-        pages[pageIndex].text,
-        CHILD_NAME,
-        storyData.namePlaceholder
-      );
-      const res = await fetch("/api/tts", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ text: pageText }),
-      });
-      if (!res.ok) throw new Error(`Prefetch failed for page ${pageIndex}: ${res.status}`);
-      const blob = await res.blob();
-      audioCache.current.set(pageIndex, URL.createObjectURL(blob));
-    } catch (err) {
-      console.warn("Audio prefetch error:", err);
-    } finally {
-      prefetching.current.delete(pageIndex);
-    }
-  });
-
-  // On initial load, prefetch pages 0, 1, and 2
-  useEffect(() => {
-    prefetchPage.current(0);
-    prefetchPage.current(1);
-    prefetchPage.current(2);
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+  // Fetch the permanent Supabase URL for a page (generates + stores if needed)
+  const fetchAudioUrl = useCallback(async (pageIndex: number, pageText: string): Promise<string> => {
+    const res = await fetch("/api/tts", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ text: pageText, pageNumber: pageIndex + 1 }),
+    });
+    if (!res.ok) throw new Error(`TTS request failed: ${res.status}`);
+    const { url } = await res.json();
+    if (!url) throw new Error("No URL returned from TTS API");
+    return url;
   }, []);
-
-  // On every page change, ensure the next 2 pages are prefetched.
-  // Prefetching both +1 and +2 guarantees a 2-page buffer regardless of
-  // whether +1 was already warm from a prior turn.
-  useEffect(() => {
-    prefetchPage.current(currentPage + 1);
-    prefetchPage.current(currentPage + 2);
-  }, [currentPage]);
 
   const playPage = useCallback(async (pageIndex: number, pageText: string) => {
     setAudioState("loading");
 
     try {
-      let blobUrl = audioCache.current.get(pageIndex);
+      const url = await fetchAudioUrl(pageIndex, pageText);
 
-      if (!blobUrl) {
-        const res = await fetch("/api/tts", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ text: pageText }),
-        });
-
-        if (!res.ok) throw new Error(`TTS request failed: ${res.status}`);
-
-        const blob = await res.blob();
-        blobUrl = URL.createObjectURL(blob);
-        audioCache.current.set(pageIndex, blobUrl);
-      }
-
-      const audio = new Audio(blobUrl);
+      const audio = new Audio(url);
       audioRef.current = audio;
 
       audio.onended = () => {
@@ -135,9 +79,9 @@ export default function ReaderPage() {
       autoAdvancing.current = false;
       setAudioState("error");
     }
-  }, [totalPages]);
+  }, [fetchAudioUrl, totalPages]);
 
-  // When the page changes due to auto-advance, kick off the next page's audio
+  // When the page changes due to auto-advance, immediately play the new page
   useEffect(() => {
     if (autoAdvancing.current) {
       autoAdvancing.current = false;
@@ -152,21 +96,16 @@ export default function ReaderPage() {
   }, [currentPage]);
 
   const handlePlayPause = useCallback(async () => {
-    // If already playing — pause
     if (audioState === "playing" && audioRef.current) {
       audioRef.current.pause();
       setAudioState("paused");
       return;
     }
-
-    // If paused — resume
     if (audioState === "paused" && audioRef.current) {
       audioRef.current.play();
       setAudioState("playing");
       return;
     }
-
-    // Otherwise fetch and play, with auto-advance chaining
     playPage(currentPage, text);
   }, [audioState, currentPage, text, playPage]);
 
@@ -267,7 +206,7 @@ export default function ReaderPage() {
         </button>
 
         {audioState === "error" && (
-          <p className="mt-3 text-xs text-muted">Не удалось загрузить аудио. Проверьте ключ API.</p>
+          <p className="mt-3 text-xs text-muted">Не удалось загрузить аудио. Проверьте настройки.</p>
         )}
       </main>
 
