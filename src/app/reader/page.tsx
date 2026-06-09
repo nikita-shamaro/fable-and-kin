@@ -247,8 +247,13 @@ export default function ReaderPage() {
               <span key={i}>
                 <span
                   style={{
-                    color: i === activeWordIdx ? "#C47B45" : "#1C1612",
-                    transition: "color 350ms ease",
+                    color: "#1C1612",
+                    backgroundColor: i === activeWordIdx ? "#F4D4B0" : "transparent",
+                    borderRadius: "4px",
+                    padding: "0 3px",
+                    transition: i === activeWordIdx
+                      ? "background-color 200ms ease"
+                      : "background-color 350ms ease",
                   }}
                 >
                   {token}
