@@ -6,10 +6,6 @@ import timestampData from "@/data/timestamps.json";
 
 const CHILD_NAME = "Олег";
 
-// Shift highlights earlier so they appear as the word begins rather than after.
-// Increase magnitude if highlights still lag; decrease if they appear too early.
-const HIGHLIGHT_OFFSET_S = -0.3;
-
 function replaceName(text: string, name: string, placeholder: string): string {
   return text.split(placeholder).join(name);
 }
@@ -66,6 +62,7 @@ export default function ReaderPage() {
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const autoAdvancing = useRef(false);
   const timingMapRef = useRef<Array<WordTiming | null>>([]);
+  const rafRef = useRef<number | null>(null);
 
   const pages = storyData.pages;
   const totalPages = pages.length;
@@ -85,6 +82,7 @@ export default function ReaderPage() {
 
   // Stop audio when the page changes (unless we're auto-advancing)
   useEffect(() => {
+    if (rafRef.current !== null) cancelAnimationFrame(rafRef.current);
     if (audioRef.current) {
       audioRef.current.pause();
       audioRef.current = null;
@@ -116,19 +114,22 @@ export default function ReaderPage() {
       const audio = new Audio(url);
       audioRef.current = audio;
 
-      audio.addEventListener("timeupdate", () => {
-        const t = audio.currentTime + HIGHLIGHT_OFFSET_S;
+      // Poll audio.currentTime via rAF (~60fps) for precise highlight tracking.
+      // timeupdate only fires ~4x/second, causing perceptible drift on longer pages.
+      const tick = () => {
         const map = timingMapRef.current;
-        // Find the last word whose start <= currentTime
+        const t = audio.currentTime;
         let idx = -1;
         for (let i = 0; i < map.length; i++) {
-          const timing = map[i];
-          if (timing && timing.start <= t) idx = i;
+          if (map[i] && map[i]!.start <= t) idx = i;
         }
         setActiveWordIdx(idx);
-      });
+        rafRef.current = requestAnimationFrame(tick);
+      };
+      rafRef.current = requestAnimationFrame(tick);
 
       audio.onended = () => {
+        if (rafRef.current !== null) cancelAnimationFrame(rafRef.current);
         setActiveWordIdx(-1);
         const isLastPage = pageIndex >= totalPages - 1;
         if (isLastPage) {
@@ -141,6 +142,7 @@ export default function ReaderPage() {
       };
 
       audio.onerror = () => {
+        if (rafRef.current !== null) cancelAnimationFrame(rafRef.current);
         autoAdvancing.current = false;
         setAudioState("error");
         setActiveWordIdx(-1);
