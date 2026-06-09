@@ -1,5 +1,4 @@
 import { NextRequest, NextResponse } from "next/server";
-import OpenAI from "openai";
 import { createClient } from "@supabase/supabase-js";
 
 const BUCKET = "audio";
@@ -17,7 +16,7 @@ export async function POST(req: NextRequest) {
     textLength: typeof text === "string" ? text.length : null,
     hasSupabaseUrl: !!process.env.NEXT_PUBLIC_SUPABASE_URL,
     hasSupabaseKey: !!process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY,
-    hasOpenAiKey:   !!process.env.OPENAI_API_KEY,
+    hasElevenLabsKey: !!process.env.ELEVENLABS_API_KEY,
     supabaseUrl:    process.env.NEXT_PUBLIC_SUPABASE_URL ?? "(not set)",
   });
 
@@ -34,9 +33,9 @@ export async function POST(req: NextRequest) {
     console.error("[tts] Supabase env vars missing", { hasSupabaseUrl: !!supabaseUrl, hasSupabaseKey: !!supabaseKey });
     return NextResponse.json({ error: "Supabase env vars are not configured" }, { status: 500 });
   }
-  if (!process.env.OPENAI_API_KEY) {
-    console.error("[tts] OPENAI_API_KEY is not set");
-    return NextResponse.json({ error: "OPENAI_API_KEY is not configured" }, { status: 500 });
+  if (!process.env.ELEVENLABS_API_KEY) {
+    console.error("[tts] ELEVENLABS_API_KEY is not set");
+    return NextResponse.json({ error: "ELEVENLABS_API_KEY is not configured" }, { status: 500 });
   }
 
   const supabase = createClient(supabaseUrl, supabaseKey);
@@ -66,18 +65,32 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ url: urlData.publicUrl });
     }
 
-    // 2. Not stored yet — generate via OpenAI TTS
-    console.log("[tts] generating audio via OpenAI TTS", { pageNumber });
-    const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
+    // 2. Not stored yet — generate via ElevenLabs TTS
+    console.log("[tts] generating audio via ElevenLabs TTS", { pageNumber });
+    const elevenResp = await fetch(
+      "https://api.elevenlabs.io/v1/text-to-speech/N8lIVPsFkvOoqev5Csxo",
+      {
+        method: "POST",
+        headers: {
+          "xi-api-key": process.env.ELEVENLABS_API_KEY!,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          text,
+          model_id: "eleven_multilingual_v2",
+          voice_settings: { stability: 0.5, similarity_boost: 0.75 },
+        }),
+      }
+    );
 
-    const mp3 = await openai.audio.speech.create({
-      model: "tts-1",
-      voice: "alloy",
-      input: text,
-    });
+    if (!elevenResp.ok) {
+      const errText = await elevenResp.text();
+      console.error("[tts] ElevenLabs error", { status: elevenResp.status, body: errText });
+      return NextResponse.json({ error: "ElevenLabs TTS failed" }, { status: 500 });
+    }
 
-    const buffer = Buffer.from(await mp3.arrayBuffer());
-    console.log("[tts] TTS generation complete", { bufferBytes: buffer.length });
+    const buffer = Buffer.from(await elevenResp.arrayBuffer());
+    console.log("[tts] ElevenLabs generation complete", { bufferBytes: buffer.length });
 
     // 3. Upload to Supabase Storage
     console.log("[tts] uploading to Supabase Storage", { path });
