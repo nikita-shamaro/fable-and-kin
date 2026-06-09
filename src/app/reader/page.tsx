@@ -296,14 +296,25 @@ export default function ReaderPage() {
     <div className="min-h-screen bg-cream flex flex-col" style={{ fontFamily: "var(--font-plus-jakarta), sans-serif" }}>
 
       {/* Header */}
-      <header className="flex items-center justify-between px-6 py-4 border-b border-border">
+      <header className="grid px-6 py-4 border-b border-border" style={{ gridTemplateColumns: "1fr auto 1fr" }}>
         <span
-          className="text-xl text-ink tracking-tight"
+          className="text-xl text-ink tracking-tight self-center"
           style={{ fontFamily: "var(--font-fraunces), serif", fontWeight: 300 }}
         >
           Fable &amp; Kin
         </span>
-        <span className="text-sm text-muted">
+        <span
+          className="self-center text-center"
+          style={{
+            fontFamily: "var(--font-fraunces), serif",
+            fontWeight: 300,
+            fontSize: "0.75rem",
+            color: "#9B8878",
+          }}
+        >
+          {(!isCover && !isEnd) ? replaceName(storyData.title, CHILD_NAME, storyData.namePlaceholder) : ""}
+        </span>
+        <span className="text-sm text-muted self-center text-right">
           {(!isCover && !isEnd) ? `${currentPage + 1} / ${totalPages}` : ""}
         </span>
       </header>
@@ -522,7 +533,13 @@ export default function ReaderPage() {
                                   : "background-color 350ms ease, color 350ms ease",
                               }}
                             >
-                              {token}
+                              {token.includes("—")
+                                ? token.split(/(—)/).map((part, pi) =>
+                                    part === "—"
+                                      ? <span key={pi} style={{ fontSize: "0.85em", color: isActive ? "#F7F0E6" : "#9B8878" }}>—</span>
+                                      : part
+                                  )
+                                : token}
                             </span>
                             {localIdx < range.end - range.start - 1 ? " " : ""}
                           </span>
