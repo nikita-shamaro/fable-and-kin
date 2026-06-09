@@ -66,9 +66,10 @@ export async function POST(req: NextRequest) {
     }
 
     // 2. Not stored yet — generate via ElevenLabs TTS
-    console.log("[tts] generating audio via ElevenLabs TTS", { pageNumber });
+    const elevenUrl = "https://api.elevenlabs.io/v1/text-to-speech/N8lIVPsFkvOoqev5Csxo";
+    console.log("[tts] generating audio via ElevenLabs TTS", { pageNumber, url: elevenUrl });
     const elevenResp = await fetch(
-      "https://api.elevenlabs.io/v1/text-to-speech/N8lIVPsFkvOoqev5Csxo",
+      elevenUrl,
       {
         method: "POST",
         headers: {
