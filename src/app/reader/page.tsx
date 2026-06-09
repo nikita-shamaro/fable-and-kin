@@ -63,6 +63,9 @@ export default function ReaderPage() {
   const autoAdvancing = useRef(false);
   const timingMapRef = useRef<Array<WordTiming | null>>([]);
   const rafRef = useRef<number | null>(null);
+  // Max end time in the Whisper data for the current page — used for proportional mapping.
+  const whisperDurationRef = useRef<number>(0);
+  const lastLogTimeRef = useRef<number>(0);
 
   const pages = storyData.pages;
   const totalPages = pages.length;
@@ -74,9 +77,15 @@ export default function ReaderPage() {
   useEffect(() => {
     const pageTimings = (timestampData.pages as { page: number; words: WordTiming[] }[])
       .find((p) => p.page === currentPage + 1);
-    timingMapRef.current = pageTimings
-      ? buildTimingMap(tokens, pageTimings.words)
-      : new Array(tokens.length).fill(null);
+    if (pageTimings && pageTimings.words.length > 0) {
+      timingMapRef.current = buildTimingMap(tokens, pageTimings.words);
+      whisperDurationRef.current = Math.max(...pageTimings.words.map((w) => w.end));
+      console.log(`[highlight] page ${currentPage + 1} — whisper duration: ${whisperDurationRef.current.toFixed(3)}s`);
+      console.log("[highlight] first 3 whisper words:", pageTimings.words.slice(0, 3));
+    } else {
+      timingMapRef.current = new Array(tokens.length).fill(null);
+      whisperDurationRef.current = 0;
+    }
     setActiveWordIdx(-1);
   }, [currentPage, tokens]);
 
@@ -114,16 +123,38 @@ export default function ReaderPage() {
       const audio = new Audio(url);
       audioRef.current = audio;
 
-      // Poll audio.currentTime via rAF (~60fps) for precise highlight tracking.
-      // timeupdate only fires ~4x/second, causing perceptible drift on longer pages.
+      audio.addEventListener("loadedmetadata", () => {
+        console.log(`[highlight] audio duration: ${audio.duration.toFixed(3)}s, whisper duration: ${whisperDurationRef.current.toFixed(3)}s, ratio: ${(audio.duration / (whisperDurationRef.current || 1)).toFixed(4)}`);
+      });
+
+      lastLogTimeRef.current = 0;
+
+      // Poll at ~60fps via rAF. Map audio.currentTime proportionally onto the
+      // Whisper timeline so any compression between the two durations is corrected.
       const tick = () => {
         const map = timingMapRef.current;
-        const t = audio.currentTime;
+        const actualDuration = audio.duration;
+        const whisperDuration = whisperDurationRef.current;
+
+        // Scale currentTime into Whisper's time space
+        const scaledT =
+          actualDuration > 0 && whisperDuration > 0
+            ? (audio.currentTime / actualDuration) * whisperDuration
+            : audio.currentTime;
+
         let idx = -1;
         for (let i = 0; i < map.length; i++) {
-          if (map[i] && map[i]!.start <= t) idx = i;
+          if (map[i] && map[i]!.start <= scaledT) idx = i;
         }
         setActiveWordIdx(idx);
+
+        // Log currentTime every ~500ms
+        const now = performance.now();
+        if (now - lastLogTimeRef.current >= 500) {
+          console.log(`[highlight] currentTime: ${audio.currentTime.toFixed(3)}s  scaledT: ${scaledT.toFixed(3)}s  activeWord: ${idx}`);
+          lastLogTimeRef.current = now;
+        }
+
         rafRef.current = requestAnimationFrame(tick);
       };
       rafRef.current = requestAnimationFrame(tick);
