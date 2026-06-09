@@ -87,21 +87,18 @@ export default function ReaderPage() {
     return () => clearTimeout(t);
   }, [pageVisible]);
 
-  // Theatrical curtain-rise transition for cover → page 1.
-  // Phase sequence: exiting (500ms) → 100ms pause → entering-prep (0ms paint)
+  // Theatrical curtain-rise transition (cover→story, story→end, end→cover).
+  // Phase sequence: exiting (500ms) → 100ms pause → entering-prep (instant paint)
   // → entering (500ms) → idle.
-  const startCurtain = useCallback(() => {
+  const startCurtain = useCallback((targetPage: number) => {
     setCurtainPhase("exiting");
     const t1 = setTimeout(() => {
-      setCurrentPage(0);
+      setCurrentPage(targetPage);
       setCurtainPhase("entering-prep");
-      // Double rAF ensures the browser paints the -30px/opacity-0 state
-      // before starting the entrance transition.
       requestAnimationFrame(() => {
         requestAnimationFrame(() => {
           setCurtainPhase("entering");
-          const t2 = setTimeout(() => setCurtainPhase("idle"), 500);
-          return () => clearTimeout(t2);
+          setTimeout(() => setCurtainPhase("idle"), 500);
         });
       });
     }, 600); // 500ms exit + 100ms pause
@@ -111,7 +108,8 @@ export default function ReaderPage() {
   const pages = storyData.pages;
   const totalPages = pages.length;
   const isCover = currentPage === -1;
-  const page = isCover ? null : pages[currentPage];
+  const isEnd = currentPage === totalPages;
+  const page = (isCover || isEnd) ? null : pages[currentPage];
   const text = page ? replaceName(page.text, CHILD_NAME, storyData.namePlaceholder) : "";
   const tokens = useMemo(() => splitTokens(text), [text]);
 
@@ -129,7 +127,7 @@ export default function ReaderPage() {
 
   // Load Whisper words for the current page
   useEffect(() => {
-    if (currentPage === -1) return;
+    if (currentPage < 0 || currentPage >= totalPages) return;
     const pageTimings = (timestampData.pages as { page: number; words: WordTiming[] }[])
       .find((p) => p.page === currentPage + 1);
     if (pageTimings && pageTimings.words.length > 0) {
@@ -214,8 +212,8 @@ export default function ReaderPage() {
         setActiveWordIdx(-1);
         const isLastPage = pageIndex >= totalPages - 1;
         if (isLastPage) {
-          autoAdvancing.current = false;
           setAudioState("idle");
+          startCurtain(totalPages);
         } else {
           autoAdvancing.current = true;
           navigateToPage(pageIndex + 1);
@@ -236,11 +234,11 @@ export default function ReaderPage() {
       autoAdvancing.current = false;
       setAudioState("error");
     }
-  }, [fetchAudioUrl, totalPages, navigateToPage]);
+  }, [fetchAudioUrl, totalPages, navigateToPage, startCurtain]);
 
   // When the page changes due to auto-advance, immediately play the new page
   useEffect(() => {
-    if (autoAdvancing.current) {
+    if (autoAdvancing.current && currentPage >= 0 && currentPage < totalPages) {
       autoAdvancing.current = false;
       const pageText = replaceName(
         pages[currentPage].text,
@@ -267,21 +265,21 @@ export default function ReaderPage() {
   }, [audioState, currentPage, text, playPage]);
 
   const goNext = useCallback(() => {
-    if (isCover) return;
-    const next = Math.min(currentPage + 1, totalPages - 1);
-    if (next !== currentPage) navigateToPage(next);
-  }, [isCover, currentPage, totalPages, navigateToPage]);
+    if (isCover || isEnd) return;
+    if (currentPage === totalPages - 1) { startCurtain(totalPages); return; }
+    navigateToPage(currentPage + 1);
+  }, [isCover, isEnd, currentPage, totalPages, navigateToPage, startCurtain]);
 
   const goPrev = useCallback(() => {
-    if (isCover) return;
+    if (isCover || isEnd) return;
     const prev = Math.max(currentPage - 1, 0);
     if (prev !== currentPage) navigateToPage(prev);
-  }, [isCover, currentPage, navigateToPage]);
+  }, [isCover, isEnd, currentPage, navigateToPage]);
 
   // Keyboard navigation (disabled on cover)
   useEffect(() => {
     const handleKey = (e: KeyboardEvent) => {
-      if (isCover) return;
+      if (isCover || isEnd) return;
       if (e.key === "ArrowRight" || e.key === "ArrowDown") goNext();
       if (e.key === "ArrowLeft" || e.key === "ArrowUp") goPrev();
       if (e.key === " ") { e.preventDefault(); handlePlayPause(); }
@@ -291,8 +289,8 @@ export default function ReaderPage() {
   }, [isCover, goNext, goPrev, handlePlayPause]);
 
   const isFirst = currentPage === 0;
-  const isLast = currentPage === totalPages - 1;
-  const hasTimings = !isCover && whisperWordsRef.current.length > 0;
+  const isLast = isEnd;
+  const hasTimings = !isCover && !isEnd && whisperWordsRef.current.length > 0;
 
   return (
     <div className="min-h-screen bg-cream flex flex-col" style={{ fontFamily: "var(--font-plus-jakarta), sans-serif" }}>
@@ -306,7 +304,7 @@ export default function ReaderPage() {
           Fable &amp; Kin
         </span>
         <span className="text-sm text-muted">
-          {isCover ? "" : `${currentPage + 1} / ${totalPages}`}
+          {(!isCover && !isEnd) ? `${currentPage + 1} / ${totalPages}` : ""}
         </span>
       </header>
 
@@ -327,7 +325,91 @@ export default function ReaderPage() {
               }
         }
       >
-        {isCover ? (
+        {isEnd ? (
+          /* ── Completion screen ── */
+          <div className="flex flex-col items-center text-center max-w-sm mx-auto">
+            <p
+              style={{
+                fontFamily: "var(--font-fraunces), serif",
+                fontWeight: 300,
+                fontStyle: "italic",
+                fontSize: "clamp(2.25rem, 8vw, 3rem)",
+                color: "#C47B45",
+                marginBottom: "20px",
+                lineHeight: 1,
+              }}
+            >
+              Конец
+            </p>
+
+            {/* Spark / feather motif */}
+            <svg
+              width="40" height="40" viewBox="0 0 40 40" fill="none"
+              aria-hidden
+              style={{ marginBottom: "16px" }}
+            >
+              {/* Central stem */}
+              <path d="M20 34 C20 34 19 24 20 8" stroke="#C47B45" strokeWidth="1.2" strokeLinecap="round"/>
+              {/* Left barbs */}
+              <path d="M20 14 C16 11 13 12 11 10" stroke="#C47B45" strokeWidth="1" strokeLinecap="round"/>
+              <path d="M20 18 C15 15 12 17 9 16" stroke="#C47B45" strokeWidth="1" strokeLinecap="round"/>
+              <path d="M20 22 C16 20 13 22 11 22" stroke="#C47B45" strokeWidth="1" strokeLinecap="round"/>
+              <path d="M20 26 C17 25 15 27 13 27" stroke="#C47B45" strokeWidth="1" strokeLinecap="round"/>
+              {/* Right barbs */}
+              <path d="M20 14 C24 11 27 12 29 10" stroke="#C47B45" strokeWidth="1" strokeLinecap="round"/>
+              <path d="M20 18 C25 15 28 17 31 16" stroke="#C47B45" strokeWidth="1" strokeLinecap="round"/>
+              <path d="M20 22 C24 20 27 22 29 22" stroke="#C47B45" strokeWidth="1" strokeLinecap="round"/>
+              <path d="M20 26 C23 25 25 27 27 27" stroke="#C47B45" strokeWidth="1" strokeLinecap="round"/>
+              {/* Tip */}
+              <path d="M20 8 C20 8 19 5 20 4 C21 5 20 8 20 8" stroke="#C47B45" strokeWidth="1" strokeLinecap="round" strokeLinejoin="round"/>
+            </svg>
+
+            <p
+              style={{
+                fontFamily: "var(--font-fraunces), serif",
+                fontWeight: 300,
+                fontSize: "clamp(0.875rem, 2.5vw, 1rem)",
+                color: "#9B8878",
+                marginBottom: "20px",
+              }}
+            >
+              {replaceName(storyData.title, CHILD_NAME, storyData.namePlaceholder)}
+            </p>
+
+            {/* Amber divider */}
+            <div
+              style={{
+                width: "40px",
+                height: "1px",
+                backgroundColor: "#C47B45",
+                opacity: 0.5,
+                marginBottom: "32px",
+              }}
+            />
+
+            <div className="flex items-center gap-3">
+              {/* Читать снова — solid amber */}
+              <button
+                onClick={() => startCurtain(-1)}
+                className="px-6 py-2.5 rounded-full text-sm font-medium tracking-wide transition-all active:scale-95"
+                style={{ backgroundColor: "#C47B45", color: "#F7F0E6", border: "none" }}
+                onMouseEnter={(e) => (e.currentTarget.style.opacity = "0.88")}
+                onMouseLeave={(e) => (e.currentTarget.style.opacity = "1")}
+              >
+                Читать снова
+              </button>
+
+              {/* В библиотеку — amber outline */}
+              <button
+                disabled
+                className="px-6 py-2.5 rounded-full text-sm font-medium tracking-wide opacity-50 cursor-not-allowed"
+                style={{ backgroundColor: "transparent", color: "#C47B45", border: "1.5px solid #C47B45" }}
+              >
+                В библиотеку
+              </button>
+            </div>
+          </div>
+        ) : isCover ? (
           /* ── Cover page ── */
           <div className="flex flex-col items-center text-center max-w-sm mx-auto">
             <p
@@ -365,7 +447,7 @@ export default function ReaderPage() {
             />
 
             <button
-              onClick={startCurtain}
+              onClick={() => startCurtain(0)}
               className="px-8 py-3 rounded-full text-sm font-medium tracking-wide transition-all active:scale-95"
               style={{
                 backgroundColor: "#C47B45",
@@ -493,7 +575,7 @@ export default function ReaderPage() {
       </main>
 
       {/* Navigation — hidden on cover */}
-      <nav className={`flex items-center justify-center gap-6 px-6 py-8 border-t border-border transition-opacity duration-200 ${isCover ? "opacity-0 pointer-events-none" : "opacity-100"}`}>
+      <nav className={`flex items-center justify-center gap-6 px-6 py-8 border-t border-border transition-opacity duration-200 ${(isCover || isEnd) ? "opacity-0 pointer-events-none" : "opacity-100"}`}>
         <button
           onClick={goPrev}
           disabled={isFirst}
