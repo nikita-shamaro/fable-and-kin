@@ -41,8 +41,9 @@ export default function ReaderPage() {
   }, [currentPage]);
 
   // Silently fetch and cache a page's audio in the background.
-  // No-ops if already cached or already being fetched.
-  const prefetchPage = useCallback(async (pageIndex: number) => {
+  // Stored in a ref so it is always the latest version without needing to be
+  // listed as a dependency in page-change effects (avoids stale-closure skips).
+  const prefetchPage = useRef(async (pageIndex: number) => {
     if (
       pageIndex < 0 ||
       pageIndex >= totalPages ||
@@ -70,21 +71,23 @@ export default function ReaderPage() {
     } finally {
       prefetching.current.delete(pageIndex);
     }
-  }, [pages, totalPages]);
+  });
 
-  // On initial load, prefetch pages 0, 1, and 2 (sequentially to avoid a burst)
+  // On initial load, prefetch pages 0, 1, and 2
   useEffect(() => {
-    prefetchPage(0);
-    prefetchPage(1);
-    prefetchPage(2);
-  // Run once on mount only
+    prefetchPage.current(0);
+    prefetchPage.current(1);
+    prefetchPage.current(2);
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Each time the page changes, prefetch the page 2 ahead if not already cached
+  // On every page change, ensure the next 2 pages are prefetched.
+  // Prefetching both +1 and +2 guarantees a 2-page buffer regardless of
+  // whether +1 was already warm from a prior turn.
   useEffect(() => {
-    prefetchPage(currentPage + 2);
-  }, [currentPage, prefetchPage]);
+    prefetchPage.current(currentPage + 1);
+    prefetchPage.current(currentPage + 2);
+  }, [currentPage]);
 
   const playPage = useCallback(async (pageIndex: number, pageText: string) => {
     setAudioState("loading");
