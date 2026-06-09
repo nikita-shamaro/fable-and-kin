@@ -293,7 +293,13 @@ export default function ReaderPage() {
   const hasTimings = !isCover && !isEnd && whisperWordsRef.current.length > 0;
 
   return (
-    <div className="min-h-screen bg-cream flex flex-col" style={{ fontFamily: "var(--font-plus-jakarta), sans-serif" }}>
+    <div
+      className="min-h-screen flex flex-col"
+      style={{
+        fontFamily: "var(--font-plus-jakarta), sans-serif",
+        background: "radial-gradient(ellipse 70% 60% at 50% 48%, #FDFAF6 0%, #F7F0E6 100%)",
+      }}
+    >
 
       {/* Header */}
       <header className="flex items-center justify-between px-6 py-4 border-b border-border">
