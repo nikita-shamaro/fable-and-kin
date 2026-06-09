@@ -475,12 +475,6 @@ export default function ReaderPage() {
         ) : (
           /* ── Story pages ── */
           <>
-            {/* Page number pill */}
-            <div className="mb-8">
-              <span className="text-xs font-medium tracking-widest uppercase text-amber px-4 py-1.5 rounded-full border border-amber/30 bg-amber/5">
-                Страница {currentPage + 1}
-              </span>
-            </div>
 
             {/* Story text */}
             <p
@@ -613,8 +607,8 @@ export default function ReaderPage() {
               aria-label={`Страница ${i + 1}`}
               className={`rounded-full transition-all ${
                 i === currentPage
-                  ? "w-6 h-2 bg-amber"
-                  : "w-2 h-2 bg-border hover:bg-muted"
+                  ? "w-2 h-2 bg-amber"
+                  : "w-1.5 h-1.5 bg-border hover:bg-muted"
               }`}
             />
           ))}
