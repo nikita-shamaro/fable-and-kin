@@ -15,8 +15,10 @@ export default function ReaderPage() {
   const [currentPage, setCurrentPage] = useState(0);
   const [audioState, setAudioState] = useState<AudioState>("idle");
 
-  // Cache blob URLs so we don't re-fetch audio for pages already visited
+  // blob URL cache — keyed by page index
   const audioCache = useRef<Map<number, string>>(new Map());
+  // tracks which pages have an in-flight prefetch so we never double-fetch
+  const prefetching = useRef<Set<number>>(new Set());
   const audioRef = useRef<HTMLAudioElement | null>(null);
 
   const pages = storyData.pages;
@@ -37,6 +39,52 @@ export default function ReaderPage() {
       setAudioState("idle");
     }
   }, [currentPage]);
+
+  // Silently fetch and cache a page's audio in the background.
+  // No-ops if already cached or already being fetched.
+  const prefetchPage = useCallback(async (pageIndex: number) => {
+    if (
+      pageIndex < 0 ||
+      pageIndex >= totalPages ||
+      audioCache.current.has(pageIndex) ||
+      prefetching.current.has(pageIndex)
+    ) return;
+
+    prefetching.current.add(pageIndex);
+    try {
+      const pageText = replaceName(
+        pages[pageIndex].text,
+        CHILD_NAME,
+        storyData.namePlaceholder
+      );
+      const res = await fetch("/api/tts", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ text: pageText }),
+      });
+      if (!res.ok) throw new Error(`Prefetch failed for page ${pageIndex}: ${res.status}`);
+      const blob = await res.blob();
+      audioCache.current.set(pageIndex, URL.createObjectURL(blob));
+    } catch (err) {
+      console.warn("Audio prefetch error:", err);
+    } finally {
+      prefetching.current.delete(pageIndex);
+    }
+  }, [pages, totalPages]);
+
+  // On initial load, prefetch pages 0, 1, and 2 (sequentially to avoid a burst)
+  useEffect(() => {
+    prefetchPage(0);
+    prefetchPage(1);
+    prefetchPage(2);
+  // Run once on mount only
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // Each time the page changes, prefetch the page 2 ahead if not already cached
+  useEffect(() => {
+    prefetchPage(currentPage + 2);
+  }, [currentPage, prefetchPage]);
 
   const playPage = useCallback(async (pageIndex: number, pageText: string) => {
     setAudioState("loading");
