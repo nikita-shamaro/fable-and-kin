@@ -24,34 +24,14 @@ function splitTokens(text: string): string[] {
   return text.split(/\s+/).filter(Boolean);
 }
 
-// Strip leading/trailing Cyrillic-text punctuation for word matching.
-function bareWord(token: string): string {
-  return token.replace(/^[«"'(—–]+|[»"').,!?:;—–]+$/g, "").toLowerCase();
-}
-
-// Map display tokens to Whisper word timings by sequential normalized matching.
-// Returns an array parallel to tokens; unmatched tokens get null.
-function buildTimingMap(
-  tokens: string[],
-  whisperWords: WordTiming[]
-): Array<WordTiming | null> {
-  const map: Array<WordTiming | null> = new Array(tokens.length).fill(null);
-  let wi = 0;
-  for (let ti = 0; ti < tokens.length; ti++) {
-    const bare = bareWord(tokens[ti]);
-    if (!bare) continue;
-    while (wi < whisperWords.length) {
-      const wBare = bareWord(whisperWords[wi].word);
-      if (wBare === bare || bare.startsWith(wBare) || wBare.startsWith(bare)) {
-        map[ti] = whisperWords[wi];
-        wi++;
-        break;
-      }
-      // Whisper split differently — advance whisper pointer and try next
-      wi++;
-    }
+// Find the index of the last Whisper word whose start time is <= scaledT.
+// Pure timestamp lookup — no string matching, never gets stuck on text mismatches.
+function activeIndexAt(words: WordTiming[], scaledT: number): number {
+  let idx = -1;
+  for (let i = 0; i < words.length; i++) {
+    if (words[i].start <= scaledT) idx = i;
   }
-  return map;
+  return idx;
 }
 
 export default function ReaderPage() {
@@ -61,9 +41,8 @@ export default function ReaderPage() {
 
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const autoAdvancing = useRef(false);
-  const timingMapRef = useRef<Array<WordTiming | null>>([]);
+  const whisperWordsRef = useRef<WordTiming[]>([]);
   const rafRef = useRef<number | null>(null);
-  // Max end time in the Whisper data for the current page — used for proportional mapping.
   const whisperDurationRef = useRef<number>(0);
   const lastLogTimeRef = useRef<number>(0);
 
@@ -73,21 +52,21 @@ export default function ReaderPage() {
   const text = replaceName(page.text, CHILD_NAME, storyData.namePlaceholder);
   const tokens = useMemo(() => splitTokens(text), [text]);
 
-  // Build timing map whenever page or tokens change
+  // Load Whisper words for the current page
   useEffect(() => {
     const pageTimings = (timestampData.pages as { page: number; words: WordTiming[] }[])
       .find((p) => p.page === currentPage + 1);
     if (pageTimings && pageTimings.words.length > 0) {
-      timingMapRef.current = buildTimingMap(tokens, pageTimings.words);
+      whisperWordsRef.current = pageTimings.words;
       whisperDurationRef.current = Math.max(...pageTimings.words.map((w) => w.end));
-      console.log(`[highlight] page ${currentPage + 1} — whisper duration: ${whisperDurationRef.current.toFixed(3)}s`);
+      console.log(`[highlight] page ${currentPage + 1} — whisper duration: ${whisperDurationRef.current.toFixed(3)}s, ${pageTimings.words.length} words`);
       console.log("[highlight] first 3 whisper words:", pageTimings.words.slice(0, 3));
     } else {
-      timingMapRef.current = new Array(tokens.length).fill(null);
+      whisperWordsRef.current = [];
       whisperDurationRef.current = 0;
     }
     setActiveWordIdx(-1);
-  }, [currentPage, tokens]);
+  }, [currentPage]);
 
   // Stop audio when the page changes (unless we're auto-advancing)
   useEffect(() => {
@@ -129,29 +108,24 @@ export default function ReaderPage() {
 
       lastLogTimeRef.current = 0;
 
-      // Poll at ~60fps via rAF. Map audio.currentTime proportionally onto the
-      // Whisper timeline so any compression between the two durations is corrected.
+      // Poll at ~60fps via rAF. Scale currentTime proportionally onto the
+      // Whisper timeline so duration mismatches between ElevenLabs and Whisper
+      // are corrected, then look up the active word purely by timestamp.
       const tick = () => {
-        const map = timingMapRef.current;
+        const words = whisperWordsRef.current;
         const actualDuration = audio.duration;
         const whisperDuration = whisperDurationRef.current;
 
-        // Scale currentTime into Whisper's time space
         const scaledT =
           actualDuration > 0 && whisperDuration > 0
             ? (audio.currentTime / actualDuration) * whisperDuration
             : audio.currentTime;
 
-        let idx = -1;
-        for (let i = 0; i < map.length; i++) {
-          if (map[i] && map[i]!.start <= scaledT) idx = i;
-        }
-        setActiveWordIdx(idx);
+        setActiveWordIdx(activeIndexAt(words, scaledT));
 
-        // Log currentTime every ~500ms
         const now = performance.now();
         if (now - lastLogTimeRef.current >= 500) {
-          console.log(`[highlight] currentTime: ${audio.currentTime.toFixed(3)}s  scaledT: ${scaledT.toFixed(3)}s  activeWord: ${idx}`);
+          console.log(`[highlight] currentTime: ${audio.currentTime.toFixed(3)}s  scaledT: ${scaledT.toFixed(3)}s  activeWord: ${activeIndexAt(words, scaledT)}`);
           lastLogTimeRef.current = now;
         }
 
@@ -237,7 +211,7 @@ export default function ReaderPage() {
 
   const isFirst = currentPage === 0;
   const isLast = currentPage === totalPages - 1;
-  const hasTimings = timingMapRef.current.some(Boolean);
+  const hasTimings = whisperWordsRef.current.length > 0;
 
   return (
     <div className="min-h-screen bg-cream flex flex-col" style={{ fontFamily: "var(--font-plus-jakarta), sans-serif" }}>
