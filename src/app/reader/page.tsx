@@ -24,6 +24,26 @@ function splitTokens(text: string): string[] {
   return text.split(/\s+/).filter(Boolean);
 }
 
+// Split text into sentences at ". ", "— ", and "«" boundaries.
+function splitIntoSentences(text: string): string[] {
+  return text
+    .split(/(?<=\. )|(?=— )|(?=«)/)
+    .map((s) => s.trim())
+    .filter(Boolean);
+}
+
+// Build token-index ranges for each sentence: { start, end } (end exclusive).
+function buildSentenceRanges(sentences: string[]): Array<{ start: number; end: number }> {
+  const ranges: Array<{ start: number; end: number }> = [];
+  let cursor = 0;
+  for (const s of sentences) {
+    const count = splitTokens(s).length;
+    ranges.push({ start: cursor, end: cursor + count });
+    cursor += count;
+  }
+  return ranges;
+}
+
 // Find the index of the last Whisper word whose start time is <= scaledT.
 // Pure timestamp lookup — no string matching, never gets stuck on text mismatches.
 function activeIndexAt(words: WordTiming[], scaledT: number): number {
@@ -51,6 +71,18 @@ export default function ReaderPage() {
   const page = pages[currentPage];
   const text = replaceName(page.text, CHILD_NAME, storyData.namePlaceholder);
   const tokens = useMemo(() => splitTokens(text), [text]);
+
+  const sentenceRanges = useMemo(() => {
+    const sentences = splitIntoSentences(text);
+    return buildSentenceRanges(sentences);
+  }, [text]);
+
+  const activeSentenceIdx = useMemo(() => {
+    if (activeWordIdx < 0) return -1;
+    return sentenceRanges.findIndex(
+      (r) => activeWordIdx >= r.start && activeWordIdx < r.end
+    );
+  }, [activeWordIdx, sentenceRanges]);
 
   // Load Whisper words for the current page
   useEffect(() => {
@@ -248,24 +280,51 @@ export default function ReaderPage() {
           }}
         >
           {hasTimings ? (
-            tokens.map((token, i) => (
-              <span key={i}>
+            sentenceRanges.map((range, sIdx) => {
+              const isActiveSentence = sIdx === activeSentenceIdx;
+              return (
                 <span
+                  key={sIdx}
                   style={{
-                    color: "#1C1612",
-                    backgroundColor: i === activeWordIdx ? "#F4D4B0" : "transparent",
-                    borderRadius: "4px",
-                    padding: "0 3px",
-                    transition: i === activeWordIdx
+                    backgroundColor: isActiveSentence
+                      ? "rgba(244, 212, 176, 0.5)"
+                      : "transparent",
+                    borderRadius: "12px",
+                    padding: "4px 8px",
+                    transition: isActiveSentence
                       ? "background-color 200ms ease"
-                      : "background-color 350ms ease",
-                  }}
+                      : "background-color 300ms ease",
+                    display: "inline",
+                    boxDecorationBreak: "clone",
+                    WebkitBoxDecorationBreak: "clone",
+                  } as React.CSSProperties}
                 >
-                  {token}
+                  {range.start > 0 ? " " : ""}
+                  {tokens.slice(range.start, range.end).map((token, localIdx) => {
+                    const globalIdx = range.start + localIdx;
+                    const isActive = globalIdx === activeWordIdx;
+                    return (
+                      <span key={globalIdx}>
+                        <span
+                          style={{
+                            backgroundColor: isActive ? "#C47B45" : "transparent",
+                            color: isActive ? "#F7F0E6" : "#1C1612",
+                            borderRadius: "4px",
+                            padding: "1px 4px",
+                            transition: isActive
+                              ? "background-color 200ms ease, color 200ms ease"
+                              : "background-color 350ms ease, color 350ms ease",
+                          }}
+                        >
+                          {token}
+                        </span>
+                        {localIdx < range.end - range.start - 1 ? " " : ""}
+                      </span>
+                    );
+                  })}
                 </span>
-                {i < tokens.length - 1 ? " " : ""}
-              </span>
-            ))
+              );
+            })
           ) : (
             text
           )}
