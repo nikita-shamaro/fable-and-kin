@@ -13,6 +13,20 @@ This is not a language learning app. It is about a child being able to speak to 
 - Anthropic SDK and Supabase client installed
 - Deployed to Vercel at fable-and-kin.vercel.app
 - GitHub repo: github.com/nikita-shamaro/fable-and-kin
+- Russian firebird story complete — 8 pages stored in src/data/story.json with courage refrain
+- Full-screen reader built at /reader with page-turn navigation, brand fonts and colours
+- Audio narration working via OpenAI TTS (tts-1, alloy voice)
+- Audio files permanently cached in Supabase Storage: bucket `audio`, path `firebird/page-{N}.mp3`
+- API route at /api/tts checks Supabase first, generates and uploads only if not already stored
+- Auto-advancing pages: audio plays through all 8 pages continuously, stops at the end
+- Progressive in-memory prefetch removed — Supabase CDN handles delivery
+
+## Next Session Goal
+- Word-by-word highlighting synced to audio, with fade transition, using Whisper timestamps
+
+## Known Issues / Pre-Demo Tasks
+- Swap alloy TTS voice for ElevenLabs voice before demo
+- Grammatical issue on one page — to be identified and fixed
 
 ## MVP Scope (Build This First)
 1. A static Russian-language story (folklore world — firebird, enchanted forest)
@@ -27,7 +41,7 @@ Do NOT build: user accounts, library, book creation wizard, payments, language t
 ## Tech Stack
 - Framework: Next.js 14 with App Router and TypeScript
 - Styling: Tailwind CSS
-- Database/Auth/Storage: Supabase (not connected yet)
+- Database/Auth/Storage: Supabase (connected — Storage in use for audio files)
 - Hosting: Vercel
 - Story generation (later): Anthropic Claude API
 - Audio narration: OpenAI TTS
