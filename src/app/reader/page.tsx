@@ -58,6 +58,7 @@ export default function ReaderPage() {
   const [currentPage, setCurrentPage] = useState(0);
   const [audioState, setAudioState] = useState<AudioState>("idle");
   const [activeWordIdx, setActiveWordIdx] = useState<number>(-1);
+  const [pageVisible, setPageVisible] = useState(true);
 
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const autoAdvancing = useRef(false);
@@ -65,6 +66,24 @@ export default function ReaderPage() {
   const rafRef = useRef<number | null>(null);
   const whisperDurationRef = useRef<number>(0);
   const lastLogTimeRef = useRef<number>(0);
+  const pendingPageRef = useRef<number | null>(null);
+
+  // Fade out → swap page → fade in. Used for all navigation.
+  const navigateToPage = useCallback((n: number) => {
+    pendingPageRef.current = n;
+    setPageVisible(false);
+  }, []);
+
+  useEffect(() => {
+    if (pageVisible) return;
+    if (pendingPageRef.current === null) return;
+    const t = setTimeout(() => {
+      setCurrentPage(pendingPageRef.current!);
+      pendingPageRef.current = null;
+      setPageVisible(true);
+    }, 200);
+    return () => clearTimeout(t);
+  }, [pageVisible]);
 
   const pages = storyData.pages;
   const totalPages = pages.length;
@@ -174,7 +193,7 @@ export default function ReaderPage() {
           setAudioState("idle");
         } else {
           autoAdvancing.current = true;
-          setCurrentPage(pageIndex + 1);
+          navigateToPage(pageIndex + 1);
         }
       };
 
@@ -192,7 +211,7 @@ export default function ReaderPage() {
       autoAdvancing.current = false;
       setAudioState("error");
     }
-  }, [fetchAudioUrl, totalPages]);
+  }, [fetchAudioUrl, totalPages, navigateToPage]);
 
   // When the page changes due to auto-advance, immediately play the new page
   useEffect(() => {
@@ -223,12 +242,14 @@ export default function ReaderPage() {
   }, [audioState, currentPage, text, playPage]);
 
   const goNext = useCallback(() => {
-    setCurrentPage((p) => Math.min(p + 1, totalPages - 1));
-  }, [totalPages]);
+    const next = Math.min(currentPage + 1, totalPages - 1);
+    if (next !== currentPage) navigateToPage(next);
+  }, [currentPage, totalPages, navigateToPage]);
 
   const goPrev = useCallback(() => {
-    setCurrentPage((p) => Math.max(p - 1, 0));
-  }, []);
+    const prev = Math.max(currentPage - 1, 0);
+    if (prev !== currentPage) navigateToPage(prev);
+  }, [currentPage, navigateToPage]);
 
   // Keyboard navigation
   useEffect(() => {
@@ -262,7 +283,13 @@ export default function ReaderPage() {
       </header>
 
       {/* Main reading area */}
-      <main className="flex-1 flex flex-col items-center justify-center px-6 py-12">
+      <main
+        className="flex-1 flex flex-col items-center justify-center px-6 py-12"
+        style={{
+          opacity: pageVisible ? 1 : 0,
+          transition: "opacity 200ms ease",
+        }}
+      >
         {/* Page number pill */}
         <div className="mb-8">
           <span className="text-xs font-medium tracking-widest uppercase text-amber px-4 py-1.5 rounded-full border border-amber/30 bg-amber/5">
@@ -393,7 +420,7 @@ export default function ReaderPage() {
           {pages.map((_, i) => (
             <button
               key={i}
-              onClick={() => setCurrentPage(i)}
+              onClick={() => { if (i !== currentPage) navigateToPage(i); }}
               aria-label={`Страница ${i + 1}`}
               className={`rounded-full transition-all ${
                 i === currentPage
