@@ -293,7 +293,7 @@ export default function ReaderPage() {
   const hasTimings = !isCover && !isEnd && whisperWordsRef.current.length > 0;
 
   return (
-    <div className="min-h-screen bg-cream flex flex-col" style={{ fontFamily: "var(--font-plus-jakarta), sans-serif" }}>
+    <div className="h-[100dvh] bg-cream flex flex-col overflow-hidden" style={{ fontFamily: "var(--font-plus-jakarta), sans-serif" }}>
 
       {/* Header */}
       <header className="grid px-6 py-4 border-b border-border" style={{ gridTemplateColumns: "1fr auto 1fr" }}>
@@ -321,24 +321,25 @@ export default function ReaderPage() {
 
       {/* Main reading area */}
       <main
-        className="flex-1 flex flex-col items-center justify-center px-4 py-8 sm:px-8 sm:py-12"
+        className="flex-1 flex flex-col items-center justify-center px-4 py-4 sm:px-8 sm:py-6 overflow-hidden"
         style={
           curtainPhase === "exiting"
-            ? { opacity: 0, transform: "translateY(60px)", transition: "opacity 500ms ease-in, transform 500ms ease-in" }
+            ? { opacity: 0, transform: "translateY(60px)", transition: "opacity 500ms ease-in, transform 500ms ease-in", height: "100%" }
             : curtainPhase === "entering-prep"
-            ? { opacity: 0, transform: "translateY(-30px)", transition: "none" }
+            ? { opacity: 0, transform: "translateY(-30px)", transition: "none", height: "100%" }
             : curtainPhase === "entering"
-            ? { opacity: 1, transform: "translateY(0)", transition: "opacity 500ms ease-out, transform 500ms ease-out" }
+            ? { opacity: 1, transform: "translateY(0)", transition: "opacity 500ms ease-out, transform 500ms ease-out", height: "100%" }
             : {
                 opacity: pageVisible ? 1 : 0,
                 transform: pageVisible ? "scale(1)" : "scale(0.98)",
                 transition: "opacity 200ms ease, transform 200ms ease",
+                height: "100%",
               }
         }
       >
         {/* Page card */}
         <div
-          className="w-full max-w-xl flex flex-col"
+          className="w-full max-w-xl flex flex-col h-full"
           style={{
             backgroundColor: "#FFFFFF",
             border: "0.5px solid #E2D8CC",
@@ -350,7 +351,7 @@ export default function ReaderPage() {
 
         {isEnd ? (
           /* ── Completion screen ── */
-          <div className="flex flex-col items-center text-center w-full" style={{ padding: "clamp(2rem, 6vw, 3.5rem) clamp(1.5rem, 5vw, 3rem)" }}>
+          <div className="flex-1 flex flex-col items-center justify-center text-center w-full" style={{ padding: "clamp(1.5rem, 4vw, 2.5rem) clamp(1.5rem, 5vw, 3rem)" }}>
             <p
               style={{
                 fontFamily: "var(--font-fraunces), serif",
@@ -434,7 +435,7 @@ export default function ReaderPage() {
           </div>
         ) : isCover ? (
           /* ── Cover page ── */
-          <div className="flex flex-col items-center text-center w-full" style={{ padding: "clamp(2rem, 6vw, 3.5rem) clamp(1.5rem, 5vw, 3rem)" }}>
+          <div className="flex-1 flex flex-col items-center justify-center text-center w-full" style={{ padding: "clamp(1.5rem, 4vw, 2.5rem) clamp(1.5rem, 5vw, 3rem)" }}>
             <p
               className="text-muted mb-3 tracking-widest uppercase"
               style={{
@@ -488,7 +489,7 @@ export default function ReaderPage() {
           <>
             {/* Illustration — page 1 only */}
             {currentPage === 0 && (
-              <div style={{ width: "100%", aspectRatio: "3 / 2", flexShrink: 0 }}>
+              <div style={{ flex: "0 0 45%", width: "100%", overflow: "hidden" }}>
                 {/* eslint-disable-next-line @next/next/no-img-element */}
                 <img
                   src="/images/page-1.png"
@@ -498,22 +499,27 @@ export default function ReaderPage() {
                     height: "100%",
                     objectFit: "cover",
                     display: "block",
-                    borderRadius: "12px 12px 0 0",
                   }}
                 />
               </div>
             )}
 
             {/* Text + controls */}
-            <div className="flex flex-col items-center w-full" style={{ padding: "clamp(2rem, 6vw, 3.5rem) clamp(1.5rem, 5vw, 3rem)" }}>
+            <div
+              className="flex flex-col items-center justify-center w-full overflow-hidden"
+              style={{
+                flex: currentPage === 0 ? "0 0 55%" : "1",
+                padding: "clamp(1.25rem, 3vw, 2rem) clamp(1.5rem, 5vw, 3rem)",
+              }}
+            >
 
             {/* Story text */}
             <p
-              className="text-ink leading-relaxed max-w-xl mx-auto mb-10"
+              className="text-ink leading-relaxed w-full mb-6"
               style={{
                 fontFamily: "var(--font-fraunces), serif",
                 fontWeight: 300,
-                fontSize: "clamp(1.25rem, 4vw, 1.75rem)",
+                fontSize: "clamp(1rem, 2.5vw, 1.35rem)",
                 textAlign: "center",
               }}
             >
@@ -623,7 +629,7 @@ export default function ReaderPage() {
       </main>
 
       {/* Navigation — hidden on cover */}
-      <nav className={`flex items-center justify-center gap-6 px-6 py-8 border-t border-border transition-opacity duration-200 ${(isCover || isEnd) ? "opacity-0 pointer-events-none" : "opacity-100"}`}>
+      <nav className={`flex items-center justify-center gap-6 px-6 py-4 border-t border-border transition-opacity duration-200 ${(isCover || isEnd) ? "opacity-0 pointer-events-none" : "opacity-100"}`}>
         <button
           onClick={goPrev}
           disabled={isFirst}
