@@ -489,11 +489,12 @@ export default function ReaderPage() {
 
             {/* Story text */}
             <p
-              className="text-center text-ink leading-relaxed max-w-xl mx-auto mb-10"
+              className="text-ink leading-relaxed max-w-xl mx-auto mb-10"
               style={{
                 fontFamily: "var(--font-fraunces), serif",
                 fontWeight: 300,
                 fontSize: "clamp(1.25rem, 4vw, 1.75rem)",
+                textAlign: "center",
               }}
             >
               {hasTimings ? (
