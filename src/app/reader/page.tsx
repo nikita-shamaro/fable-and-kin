@@ -6,6 +6,10 @@ import timestampData from "@/data/timestamps.json";
 
 const CHILD_NAME = "Олег";
 
+// Shift highlights earlier so they appear as the word begins rather than after.
+// Increase magnitude if highlights still lag; decrease if they appear too early.
+const HIGHLIGHT_OFFSET_S = -0.3;
+
 function replaceName(text: string, name: string, placeholder: string): string {
   return text.split(placeholder).join(name);
 }
@@ -113,7 +117,7 @@ export default function ReaderPage() {
       audioRef.current = audio;
 
       audio.addEventListener("timeupdate", () => {
-        const t = audio.currentTime;
+        const t = audio.currentTime + HIGHLIGHT_OFFSET_S;
         const map = timingMapRef.current;
         // Find the last word whose start <= currentTime
         let idx = -1;
