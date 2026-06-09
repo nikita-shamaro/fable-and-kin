@@ -24,13 +24,80 @@ export default function ReaderPage() {
   const page = pages[currentPage];
   const text = replaceName(page.text, CHILD_NAME, storyData.namePlaceholder);
 
-  // Stop audio and reset state when page changes
+  // When page changes, stop any current audio.
+  // If autoAdvancing, the play effect will fire next; otherwise reset to idle.
+  const autoAdvancing = useRef(false);
+
   useEffect(() => {
     if (audioRef.current) {
       audioRef.current.pause();
       audioRef.current = null;
     }
-    setAudioState("idle");
+    if (!autoAdvancing.current) {
+      setAudioState("idle");
+    }
+  }, [currentPage]);
+
+  const playPage = useCallback(async (pageIndex: number, pageText: string) => {
+    setAudioState("loading");
+
+    try {
+      let blobUrl = audioCache.current.get(pageIndex);
+
+      if (!blobUrl) {
+        const res = await fetch("/api/tts", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ text: pageText }),
+        });
+
+        if (!res.ok) throw new Error(`TTS request failed: ${res.status}`);
+
+        const blob = await res.blob();
+        blobUrl = URL.createObjectURL(blob);
+        audioCache.current.set(pageIndex, blobUrl);
+      }
+
+      const audio = new Audio(blobUrl);
+      audioRef.current = audio;
+
+      audio.onended = () => {
+        const isLastPage = pageIndex >= totalPages - 1;
+        if (isLastPage) {
+          autoAdvancing.current = false;
+          setAudioState("idle");
+        } else {
+          autoAdvancing.current = true;
+          setCurrentPage(pageIndex + 1);
+        }
+      };
+
+      audio.onerror = () => {
+        autoAdvancing.current = false;
+        setAudioState("error");
+      };
+
+      await audio.play();
+      setAudioState("playing");
+    } catch (err) {
+      console.error("TTS error:", err);
+      autoAdvancing.current = false;
+      setAudioState("error");
+    }
+  }, [totalPages]);
+
+  // When the page changes due to auto-advance, kick off the next page's audio
+  useEffect(() => {
+    if (autoAdvancing.current) {
+      autoAdvancing.current = false;
+      const pageText = replaceName(
+        pages[currentPage].text,
+        CHILD_NAME,
+        storyData.namePlaceholder
+      );
+      playPage(currentPage, pageText);
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentPage]);
 
   const handlePlayPause = useCallback(async () => {
@@ -48,39 +115,9 @@ export default function ReaderPage() {
       return;
     }
 
-    // Otherwise fetch audio (or use cache) and play
-    setAudioState("loading");
-
-    try {
-      let blobUrl = audioCache.current.get(currentPage);
-
-      if (!blobUrl) {
-        const res = await fetch("/api/tts", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ text }),
-        });
-
-        if (!res.ok) throw new Error(`TTS request failed: ${res.status}`);
-
-        const blob = await res.blob();
-        blobUrl = URL.createObjectURL(blob);
-        audioCache.current.set(currentPage, blobUrl);
-      }
-
-      const audio = new Audio(blobUrl);
-      audioRef.current = audio;
-
-      audio.onended = () => setAudioState("idle");
-      audio.onerror = () => setAudioState("error");
-
-      await audio.play();
-      setAudioState("playing");
-    } catch (err) {
-      console.error("TTS error:", err);
-      setAudioState("error");
-    }
-  }, [audioState, currentPage, text]);
+    // Otherwise fetch and play, with auto-advance chaining
+    playPage(currentPage, text);
+  }, [audioState, currentPage, text, playPage]);
 
   const goNext = useCallback(() => {
     setCurrentPage((p) => Math.min(p + 1, totalPages - 1));
