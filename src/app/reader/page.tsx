@@ -293,13 +293,7 @@ export default function ReaderPage() {
   const hasTimings = !isCover && !isEnd && whisperWordsRef.current.length > 0;
 
   return (
-    <div
-      className="min-h-screen flex flex-col"
-      style={{
-        fontFamily: "var(--font-plus-jakarta), sans-serif",
-        background: "radial-gradient(ellipse 70% 60% at 50% 48%, #FDFAF6 0%, #F7F0E6 100%)",
-      }}
-    >
+    <div className="min-h-screen bg-cream flex flex-col" style={{ fontFamily: "var(--font-plus-jakarta), sans-serif" }}>
 
       {/* Header */}
       <header className="flex items-center justify-between px-6 py-4 border-b border-border">
@@ -316,7 +310,7 @@ export default function ReaderPage() {
 
       {/* Main reading area */}
       <main
-        className="flex-1 flex flex-col items-center justify-center px-6 py-12"
+        className="flex-1 flex flex-col items-center justify-center px-4 py-8 sm:px-8 sm:py-12"
         style={
           curtainPhase === "exiting"
             ? { opacity: 0, transform: "translateY(60px)", transition: "opacity 500ms ease-in, transform 500ms ease-in" }
@@ -331,9 +325,21 @@ export default function ReaderPage() {
               }
         }
       >
+        {/* Page card */}
+        <div
+          className="w-full max-w-xl flex flex-col items-center"
+          style={{
+            backgroundColor: "#FFFFFF",
+            border: "0.5px solid #E2D8CC",
+            boxShadow: "0 2px 32px rgba(28, 22, 18, 0.06)",
+            borderRadius: "16px",
+            padding: "clamp(2rem, 6vw, 3.5rem) clamp(1.5rem, 5vw, 3rem)",
+          }}
+        >
+
         {isEnd ? (
           /* ── Completion screen ── */
-          <div className="flex flex-col items-center text-center max-w-sm mx-auto">
+          <div className="flex flex-col items-center text-center w-full">
             <p
               style={{
                 fontFamily: "var(--font-fraunces), serif",
@@ -417,7 +423,7 @@ export default function ReaderPage() {
           </div>
         ) : isCover ? (
           /* ── Cover page ── */
-          <div className="flex flex-col items-center text-center max-w-sm mx-auto">
+          <div className="flex flex-col items-center text-center w-full">
             <p
               className="text-muted mb-3 tracking-widest uppercase"
               style={{
@@ -578,6 +584,8 @@ export default function ReaderPage() {
             )}
           </>
         )}
+
+        </div>{/* /card */}
       </main>
 
       {/* Navigation — hidden on cover */}
