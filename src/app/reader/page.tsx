@@ -287,7 +287,8 @@ export default function ReaderPage() {
         className="flex-1 flex flex-col items-center justify-center px-6 py-12"
         style={{
           opacity: pageVisible ? 1 : 0,
-          transition: "opacity 200ms ease",
+          transform: pageVisible ? "scale(1)" : "scale(0.98)",
+          transition: "opacity 200ms ease, transform 200ms ease",
         }}
       >
         {/* Page number pill */}
