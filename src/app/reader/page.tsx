@@ -338,19 +338,19 @@ export default function ReaderPage() {
       >
         {/* Page card */}
         <div
-          className="w-full max-w-xl flex flex-col items-center"
+          className="w-full max-w-xl flex flex-col"
           style={{
             backgroundColor: "#FFFFFF",
             border: "0.5px solid #E2D8CC",
             boxShadow: "0 2px 32px rgba(28, 22, 18, 0.06)",
             borderRadius: "16px",
-            padding: "clamp(2rem, 6vw, 3.5rem) clamp(1.5rem, 5vw, 3rem)",
+            overflow: "hidden",
           }}
         >
 
         {isEnd ? (
           /* ── Completion screen ── */
-          <div className="flex flex-col items-center text-center w-full">
+          <div className="flex flex-col items-center text-center w-full" style={{ padding: "clamp(2rem, 6vw, 3.5rem) clamp(1.5rem, 5vw, 3rem)" }}>
             <p
               style={{
                 fontFamily: "var(--font-fraunces), serif",
@@ -434,7 +434,7 @@ export default function ReaderPage() {
           </div>
         ) : isCover ? (
           /* ── Cover page ── */
-          <div className="flex flex-col items-center text-center w-full">
+          <div className="flex flex-col items-center text-center w-full" style={{ padding: "clamp(2rem, 6vw, 3.5rem) clamp(1.5rem, 5vw, 3rem)" }}>
             <p
               className="text-muted mb-3 tracking-widest uppercase"
               style={{
@@ -486,6 +486,26 @@ export default function ReaderPage() {
         ) : (
           /* ── Story pages ── */
           <>
+            {/* Illustration — page 1 only */}
+            {currentPage === 0 && (
+              <div style={{ width: "100%", aspectRatio: "3 / 2", flexShrink: 0 }}>
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img
+                  src="/images/page-1.png"
+                  alt="Иллюстрация к странице 1"
+                  style={{
+                    width: "100%",
+                    height: "100%",
+                    objectFit: "cover",
+                    display: "block",
+                    borderRadius: "12px 12px 0 0",
+                  }}
+                />
+              </div>
+            )}
+
+            {/* Text + controls */}
+            <div className="flex flex-col items-center w-full" style={{ padding: "clamp(2rem, 6vw, 3.5rem) clamp(1.5rem, 5vw, 3rem)" }}>
 
             {/* Story text */}
             <p
@@ -594,6 +614,8 @@ export default function ReaderPage() {
             {audioState === "error" && (
               <p className="mt-3 text-xs text-muted">Не удалось загрузить аудио. Проверьте настройки.</p>
             )}
+
+            </div>{/* /text+controls */}
           </>
         )}
 
