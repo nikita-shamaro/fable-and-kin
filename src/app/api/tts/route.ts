@@ -3,12 +3,42 @@ import { createClient } from "@supabase/supabase-js";
 
 const BUCKET = "audio";
 
-function storagePath(pageNumber: number): string {
-  return `firebird/page-${pageNumber}.mp3`;
+const DEFAULT_NAME = "Олег";
+const DEFAULT_GENDER = "m";
+
+const CYRILLIC_TO_LATIN: Record<string, string> = {
+  а: "a", б: "b", в: "v", г: "g", д: "d", е: "e", ё: "yo", ж: "zh",
+  з: "z", и: "i", й: "y", к: "k", л: "l", м: "m", н: "n", о: "o",
+  п: "p", р: "r", с: "s", т: "t", у: "u", ф: "f", х: "h", ц: "ts",
+  ч: "ch", ш: "sh", щ: "sch", ъ: "", ы: "y", ь: "", э: "e", ю: "yu",
+  я: "ya",
+};
+
+// Storage keys must be ASCII — transliterate the name; fall back to hex if
+// nothing survives (e.g. a name in another script).
+function nameSlug(name: string): string {
+  const lower = name.toLowerCase();
+  let out = "";
+  for (const ch of lower) {
+    if (/[a-z0-9-]/.test(ch)) out += ch;
+    else if (ch in CYRILLIC_TO_LATIN) out += CYRILLIC_TO_LATIN[ch];
+  }
+  if (!out) out = Buffer.from(name, "utf8").toString("hex").slice(0, 24);
+  return out;
+}
+
+// The original Олег narration lives at the legacy path — keep serving it
+// from there so it is never regenerated.
+function storageDir(name: string, gender: string): string {
+  if (name === DEFAULT_NAME && gender === DEFAULT_GENDER) return "firebird";
+  return `firebird/${nameSlug(name)}-${gender}`;
 }
 
 export async function POST(req: NextRequest) {
-  const { text, pageNumber } = await req.json();
+  const body = await req.json();
+  const { text, pageNumber } = body;
+  const name: string = typeof body.name === "string" && body.name.trim() ? body.name.trim() : DEFAULT_NAME;
+  const gender: string = body.gender === "f" ? "f" : "m";
 
   // Startup diagnostics — log config presence without exposing values
   console.log("[tts] handler invoked", {
@@ -39,14 +69,15 @@ export async function POST(req: NextRequest) {
   }
 
   const supabase = createClient(supabaseUrl, supabaseKey);
-  const path = storagePath(pageNumber);
+  const dir = storageDir(name, gender);
+  const path = `${dir}/page-${pageNumber}.mp3`;
 
   try {
     // 1. Check whether the file already exists in storage
     console.log("[tts] checking storage for existing file", { path });
     const { data: existing, error: listError } = await supabase.storage
       .from(BUCKET)
-      .list("firebird", { search: `page-${pageNumber}.mp3` });
+      .list(dir, { search: `page-${pageNumber}.mp3` });
 
     if (listError) {
       console.error("[tts] Supabase list error", {

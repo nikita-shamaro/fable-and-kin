@@ -1,48 +1,57 @@
 {
-  "title": "Олег и Жар-птица",
+  "title": "[NAME] и Жар-птица",
   "language": "ru",
   "ageRange": "4-6",
   "namePlaceholder": "[NAME]",
   "refrain": "И [NAME] не испугался.",
+  "refrainF": "И [NAME] не испугалась.",
   "pages": [
     {
       "page": 1,
       "text": "За густым лесом, где деревья касаются звёзд, жил маленький мальчик. Его звали [NAME]. Каждый вечер [NAME] смотрел на лес и мечтал об удивительных приключениях.",
+      "textF": "За густым лесом, где деревья касаются звёзд, жила маленькая девочка. Её звали [NAME]. Каждый вечер [NAME] смотрела на лес и мечтала об удивительных приключениях.",
       "imagePrompt": "A soft watercolour illustration of a small Russian wooden house at the edge of a vast enchanted forest at dusk, warm amber light in the windows, tall dark pine trees touching a star-filled sky, gentle and dreamy, children's picture book style"
     },
     {
       "page": 2,
       "text": "Однажды ночью [NAME] увидел в темноте яркий свет. Это было перо — золотое, светящееся, тёплое как солнце. Оно лежало прямо у его ног. И [NAME] не испугался.",
+      "textF": "Однажды ночью [NAME] увидела в темноте яркий свет. Это было перо — золотое, светящееся, тёплое как солнце. Оно лежало прямо у её ног. И [NAME] не испугалась.",
       "imagePrompt": "A soft watercolour illustration of a single glowing golden feather lying on dark forest moss, radiating warm amber and orange light in the darkness, magical and gentle, children's picture book style"
     },
     {
       "page": 3,
       "text": "«Это перо Жар-птицы,» — прошептал старый дедушка. «Тот, кто найдёт её, получит самое заветное желание.» [NAME] крепко держал перо и думал.",
+      "textF": "«Это перо Жар-птицы,» — прошептал старый дедушка. «Тот, кто найдёт её, получит самое заветное желание.» [NAME] крепко держала перо и думала.",
       "imagePrompt": "A soft watercolour illustration of a kind elderly Russian grandfather with a white beard whispering to a small boy by firelight inside a warm wooden home, the boy holds a glowing golden feather, cosy and intimate, children's picture book style"
     },
     {
       "page": 4,
       "text": "Утром [NAME] вошёл в волшебный лес. Деревья были высокими и добрыми. Белочки и зайцы смотрели с любопытством. [NAME] чувствовал — лес рад ему.",
+      "textF": "Утром [NAME] вошла в волшебный лес. Деревья были высокими и добрыми. Белочки и зайцы смотрели с любопытством. [NAME] чувствовала — лес рад ей.",
       "imagePrompt": "A soft watercolour illustration of a small boy walking into a magical Russian forest in early morning light, tall gentle pine trees on either side, friendly squirrels and rabbits watching from branches and roots, golden morning light filtering through, children's picture book style"
     },
     {
       "page": 5,
       "text": "Вдруг среди деревьев появился свет — яркий, оранжевый, живой. Жар-птица сидела на ветке. [NAME] замер — она смотрела прямо на него. Её перья горели как тысяча свечей. И [NAME] не испугался.",
+      "textF": "Вдруг среди деревьев появился свет — яркий, оранжевый, живой. Жар-птица сидела на ветке. [NAME] замерла — она смотрела прямо на неё. Её перья горели как тысяча свечей. И [NAME] не испугалась.",
       "imagePrompt": "A soft watercolour illustration of a magnificent firebird perched on a branch in an enchanted forest, feathers glowing in brilliant orange gold and red, illuminating the surrounding trees, looking gently at a small boy below, magical and warm, children's picture book style"
     },
     {
       "page": 6,
       "text": "«Зачем ты пришёл?» — спросила Жар-птица мягким голосом. [NAME] сделал шаг вперёд. «Я хочу, чтобы моя семья всегда была счастлива,» — сказал он честно. И [NAME] не испугался.",
+      "textF": "«Зачем ты пришла?» — спросила Жар-птица мягким голосом. [NAME] сделала шаг вперёд. «Я хочу, чтобы моя семья всегда была счастлива,» — сказала она честно. И [NAME] не испугалась.",
       "imagePrompt": "A soft watercolour illustration of a small boy taking a step toward a glowing firebird in a magical forest, the bird bending its head toward him gently as if listening, warm golden light surrounding them both, tender and magical, children's picture book style"
     },
     {
       "page": 7,
       "text": "Жар-птица улыбнулась и взмахнула крыльями. Золотые искры полетели во все стороны и превратились в маленькие звёзды. [NAME] смотрел и улыбался.",
+      "textF": "Жар-птица улыбнулась и взмахнула крыльями. Золотые искры полетели во все стороны и превратились в маленькие звёзды. [NAME] смотрела и улыбалась.",
       "imagePrompt": "A soft watercolour illustration of a firebird spreading its magnificent wings, golden sparks flying in all directions transforming into tiny stars, an enchanted forest filled with warm magical light, breathtaking and joyful, children's picture book style"
     },
     {
       "page": 8,
       "text": "Когда [NAME] вернулся домой, дедушка ждал у двери. Они обнялись крепко-крепко. И в тот вечер вся семья сидела вместе, и каждый знал — они счастливы.",
+      "textF": "Когда [NAME] вернулась домой, дедушка ждал у двери. Они обнялись крепко-крепко. И в тот вечер вся семья сидела вместе, и каждый знал — они счастливы.",
       "imagePrompt": "A soft watercolour illustration of a small boy being embraced by his grandfather at the door of a warm Russian wooden house, golden evening light, the whole family visible through the window gathered together, deeply warm and tender, children's picture book style"
     }
   ]

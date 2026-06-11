@@ -1,13 +1,27 @@
 "use client";
 
-import { useState, useCallback, useEffect, useRef, useMemo } from "react";
+import { useState, useCallback, useEffect, useRef, useMemo, Suspense } from "react";
+import { useSearchParams } from "next/navigation";
 import storyData from "@/data/story.json";
 import timestampData from "@/data/timestamps.json";
 
-const CHILD_NAME = "Олег";
+const DEFAULT_NAME = "Олег";
 
 function replaceName(text: string, name: string, placeholder: string): string {
   return text.split(placeholder).join(name);
+}
+
+type Gender = "m" | "f";
+
+interface StoryPage {
+  page: number;
+  text: string;
+  textF?: string;
+  imagePrompt: string;
+}
+
+function pageTextFor(page: StoryPage, gender: Gender): string {
+  return gender === "f" && page.textF ? page.textF : page.text;
 }
 
 type AudioState = "idle" | "loading" | "playing" | "paused" | "error";
@@ -55,6 +69,18 @@ function activeIndexAt(words: WordTiming[], scaledT: number): number {
 }
 
 export default function ReaderPage() {
+  return (
+    <Suspense fallback={null}>
+      <Reader />
+    </Suspense>
+  );
+}
+
+function Reader() {
+  const searchParams = useSearchParams();
+  const childName = searchParams.get("name")?.trim().split(/\s+/)[0] || DEFAULT_NAME;
+  const gender: Gender = searchParams.get("gender") === "f" ? "f" : "m";
+
   const [currentPage, setCurrentPage] = useState(-1); // -1 = cover
   const [audioState, setAudioState] = useState<AudioState>("idle");
   const [activeWordIdx, setActiveWordIdx] = useState<number>(-1);
@@ -107,10 +133,23 @@ export default function ReaderPage() {
 
   const pages = storyData.pages;
   const totalPages = pages.length;
+
+  // Preload page illustrations once so pages without artwork render the
+  // text-only layout immediately, with no empty image area flashing.
+  const [imageAvailable, setImageAvailable] = useState<Record<number, boolean>>({});
+  useEffect(() => {
+    pages.forEach((p) => {
+      const img = new Image();
+      img.onload = () => setImageAvailable((m) => ({ ...m, [p.page]: true }));
+      img.onerror = () => setImageAvailable((m) => ({ ...m, [p.page]: false }));
+      img.src = `/images/page-${p.page}.png`;
+    });
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
   const isCover = currentPage === -1;
   const isEnd = currentPage === totalPages;
   const page = (isCover || isEnd) ? null : pages[currentPage];
-  const text = page ? replaceName(page.text, CHILD_NAME, storyData.namePlaceholder) : "";
+  const text = page ? replaceName(pageTextFor(page, gender), childName, storyData.namePlaceholder) : "";
   const tokens = useMemo(() => splitTokens(text), [text]);
 
   const sentenceRanges = useMemo(() => {
@@ -159,13 +198,13 @@ export default function ReaderPage() {
     const res = await fetch("/api/tts", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ text: pageText, pageNumber: pageIndex + 1 }),
+      body: JSON.stringify({ text: pageText, pageNumber: pageIndex + 1, name: childName, gender }),
     });
     if (!res.ok) throw new Error(`TTS request failed: ${res.status}`);
     const { url } = await res.json();
     if (!url) throw new Error("No URL returned from TTS API");
     return url;
-  }, []);
+  }, [childName, gender]);
 
   const playPage = useCallback(async (pageIndex: number, pageText: string) => {
     setAudioState("loading");
@@ -241,8 +280,8 @@ export default function ReaderPage() {
     if (autoAdvancing.current && currentPage >= 0 && currentPage < totalPages) {
       autoAdvancing.current = false;
       const pageText = replaceName(
-        pages[currentPage].text,
-        CHILD_NAME,
+        pageTextFor(pages[currentPage], gender),
+        childName,
         storyData.namePlaceholder
       );
       playPage(currentPage, pageText);
@@ -312,7 +351,7 @@ export default function ReaderPage() {
             color: "#9B8878",
           }}
         >
-          {(!isCover && !isEnd) ? replaceName(storyData.title, CHILD_NAME, storyData.namePlaceholder) : ""}
+          {(!isCover && !isEnd) ? replaceName(storyData.title, childName, storyData.namePlaceholder) : ""}
         </span>
         <span className="text-sm text-muted self-center text-right">
           {(!isCover && !isEnd) ? `${currentPage + 1} / ${totalPages}` : ""}
@@ -397,7 +436,7 @@ export default function ReaderPage() {
                 marginBottom: "20px",
               }}
             >
-              {replaceName(storyData.title, CHILD_NAME, storyData.namePlaceholder)}
+              {replaceName(storyData.title, childName, storyData.namePlaceholder)}
             </p>
 
             {/* Amber divider */}
@@ -456,7 +495,7 @@ export default function ReaderPage() {
                 fontSize: "clamp(1.75rem, 6vw, 2.75rem)",
               }}
             >
-              {replaceName(storyData.title, CHILD_NAME, storyData.namePlaceholder)}
+              {replaceName(storyData.title, childName, storyData.namePlaceholder)}
             </h1>
 
             {/* Amber divider */}
@@ -487,13 +526,13 @@ export default function ReaderPage() {
         ) : (
           /* ── Story pages ── */
           <>
-            {/* Illustration — page 1 only */}
-            {currentPage === 0 && (
+            {/* Illustration — shown on any page whose artwork exists */}
+            {page && imageAvailable[page.page] && (
               <div style={{ flex: "0 0 45%", width: "100%", overflow: "hidden" }}>
                 {/* eslint-disable-next-line @next/next/no-img-element */}
                 <img
-                  src="/images/page-1.png"
-                  alt="Иллюстрация к странице 1"
+                  src={`/images/page-${page.page}.png`}
+                  alt={`Иллюстрация к странице ${page.page}`}
                   style={{
                     width: "100%",
                     height: "100%",
@@ -508,7 +547,7 @@ export default function ReaderPage() {
             <div
               className="flex flex-col items-center justify-center w-full overflow-hidden"
               style={{
-                flex: currentPage === 0 ? "0 0 55%" : "1",
+                flex: page && imageAvailable[page.page] ? "0 0 55%" : "1",
                 padding: "clamp(1.25rem, 3vw, 2rem) clamp(1.5rem, 5vw, 3rem)",
               }}
             >
