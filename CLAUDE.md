@@ -16,8 +16,8 @@ This is not a language learning app. It is about a child being able to speak to 
 - Russian firebird story complete — 8 pages stored in src/data/story.json with courage refrain
 - Full reader built at /reader — cover page, 8 story pages, completion screen («Конец»)
 - Audio narration via ElevenLabs (eleven_multilingual_v2, voice N8lIVPsFkvOoqev5Csxo)
-- Audio files permanently cached in Supabase Storage: bucket `audio`, path `firebird/page-{N}.mp3`
-- API route at /api/tts checks Supabase first, generates and uploads only if not already stored
+- Audio files permanently cached in Supabase Storage: bucket `audio`. Original Олег narration at legacy path `firebird/page-{N}.mp3`; other name/gender combinations at `firebird/{translit-name}-{m|f}/page-{N}.mp3`
+- API route at /api/tts checks Supabase first, generates and uploads only if not already stored; accepts `name` and `gender` for per-name caching
 - Auto-advancing pages: audio plays through all 8 pages continuously, triggers completion screen at end
 - Dual-level highlighting implemented and working:
   - Word level: amber #C47B45 background, border-radius 4px, cream text — tracks audio via rAF at ~60fps
@@ -30,29 +30,35 @@ This is not a language learning app. It is about a child being able to speak to 
   - Same curtain animation for story → completion screen and completion → cover
 - Reader layout: full viewport (100dvh), no scroll — card fills available height
 - Page-within-card layout: white #FFFFFF card, 0.5px border #E2D8CC, soft box-shadow, border-radius 16px, cream outer background
-- Illustration support: page 1 loads /public/images/page-1.png at top 45% of card (object-fit cover); pages 2–8 show text-only layout
+- Illustration support: every page loads /public/images/page-{N}.png at top 45% of card (object-fit cover) when the file exists; pages without artwork fall back to text-only layout (availability preloaded on mount, no flash)
+- All 8 illustrations in place: page 1 from Midjourney; pages 2–8 generated via scripts/generate-illustrations.ts (OpenAI gpt-image-1, page-1.png as style reference, consistent hero in mustard jumper). Script skips existing files — drop in Midjourney replacements any time
 - Header: 3-column grid — wordmark left, story title centred (Fraunces 300, 0.75rem, muted), page counter right
 - Nav: dot indicators (6–8px), arrow buttons, hidden on cover and completion screen
+- Name input screen at /start: child name, boy/girl selector, age band chips (4–6 active, 2–3 and 7–9 marked «скоро») → routes to /reader?name=…&gender=…
+- Reader injects name from URL params into text, title, and TTS requests (defaults to Олег)
+- Gendered story text: story.json has masculine `text` and feminine `textF` per page (identical word counts so Whisper timestamps align), plus `refrain`/`refrainF`
+- Landing page at / — on-brand cream/Fraunces with «Создать сказку» CTA to /start
 
 ## Next Session Goal
-- Generate remaining 7 illustrations in Midjourney using page-1.png as --sref style reference
-- Place as /public/images/page-2.png through page-8.png and wire up in reader
-- Build name input screen (before reader): child's name field, gender selector, age band selector
-- Name input routes to reader and injects name into story text and audio
+- QA the full demo flow on the Vercel deployment (confirm ELEVENLABS_API_KEY is set in Vercel env for new-name generation)
+- Optionally replace generated illustrations with Midjourney art (overwrite public/images/page-{N}.png)
+- Validate word highlighting sync across all 8 pages for a few different names
 
 ## Known Issues / Notes
 - Word highlighting sync should be validated across all 8 pages — may need per-page tuning
-- Illustration style reference: public/images/page-1.png — use --sref in Midjourney for consistency across all 8 pages
+- Non-Олег names reuse the Олег Whisper timestamps (proportionally scaled) — close enough in practice since word counts match, but very long names may drift slightly
+- Illustrations depict a boy hero; girl stories currently show the same artwork
+- Illustration style reference: public/images/page-1.png (1344×896). npm run generate-illustrations regenerates any missing page-{N}.png
 
 ## MVP Scope (Build This First)
 1. ✅ A static Russian-language story (folklore world — firebird, enchanted forest)
-2. Child's name inserted dynamically into the story text and narration (hardcoded to «Олег» for now)
+2. ✅ Child's name inserted dynamically into the story text and narration
 3. ✅ Page-turn reading experience with cover and completion screen
 4. ✅ Russian audio narration via ElevenLabs (generated once, cached in Supabase)
 5. ✅ Word-by-word and sentence highlighting synced to audio
 6. ✅ One age band: 4-6 year olds
-7. Illustrations for all 8 pages (page 1 done — 7 remaining)
-8. Name input screen before reader (child name, gender, age band)
+7. ✅ Illustrations for all 8 pages
+8. ✅ Name input screen before reader (child name, gender, age band)
 
 Do NOT build yet: user accounts, library, payments, language toggle, or AI generation pipeline.
 

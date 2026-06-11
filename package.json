@@ -7,7 +7,8 @@
     "build": "next build",
     "start": "next start",
     "lint": "next lint",
-    "generate-timestamps": "npx tsx scripts/generate-timestamps.ts"
+    "generate-timestamps": "npx tsx scripts/generate-timestamps.ts",
+    "generate-illustrations": "npx tsx scripts/generate-illustrations.ts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.102.0",
