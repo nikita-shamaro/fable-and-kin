@@ -186,6 +186,18 @@ function Reader() {
   }, [currentPage]);
 
   const fetchPageAudio = useCallback(async (pageIndex: number): Promise<{ url: string; words: WordTiming[] }> => {
+    // Check the pre-generated cache written by /start before the navigation.
+    try {
+      const cached = sessionStorage.getItem(`fk_audio_${childName}_${gender}`);
+      if (cached) {
+        const all: Array<{ url: string; words: WordTiming[] } | null> = JSON.parse(cached);
+        const entry = all[pageIndex];
+        if (entry?.url) return { url: entry.url, words: Array.isArray(entry.words) ? entry.words : [] };
+      }
+    } catch {
+      // sessionStorage unavailable or corrupted — fall through
+    }
+
     const res = await fetch("/api/tts", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
