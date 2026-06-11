@@ -3,7 +3,6 @@
 import { useState, useCallback, useEffect, useRef, useMemo, Suspense } from "react";
 import { useSearchParams } from "next/navigation";
 import storyData from "@/data/story.json";
-import timestampData from "@/data/timestamps.json";
 
 const DEFAULT_NAME = "Олег";
 
@@ -26,10 +25,13 @@ function pageTextFor(page: StoryPage, gender: Gender): string {
 
 type AudioState = "idle" | "loading" | "playing" | "paused" | "error";
 
+// Timings come from the TTS API, aligned 1:1 with the display tokens of the
+// same text. start === null marks punctuation-only tokens (e.g. a standalone
+// em dash) that are never highlighted.
 interface WordTiming {
   word: string;
-  start: number;
-  end: number;
+  start: number | null;
+  end: number | null;
 }
 
 // Split display text into tokens on whitespace boundaries.
@@ -58,12 +60,13 @@ function buildSentenceRanges(sentences: string[]): Array<{ start: number; end: n
   return ranges;
 }
 
-// Find the index of the last Whisper word whose start time is <= scaledT.
-// Pure timestamp lookup — no string matching, never gets stuck on text mismatches.
-function activeIndexAt(words: WordTiming[], scaledT: number): number {
+// Find the index of the last highlightable token whose start time is <= t.
+// Punctuation-only tokens (start === null) are skipped entirely.
+function activeIndexAt(words: WordTiming[], t: number): number {
   let idx = -1;
   for (let i = 0; i < words.length; i++) {
-    if (words[i].start <= scaledT) idx = i;
+    const start = words[i].start;
+    if (start !== null && start <= t) idx = i;
   }
   return idx;
 }
@@ -90,10 +93,8 @@ function Reader() {
 
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const autoAdvancing = useRef(false);
-  const whisperWordsRef = useRef<WordTiming[]>([]);
+  const wordsRef = useRef<WordTiming[]>([]);
   const rafRef = useRef<number | null>(null);
-  const whisperDurationRef = useRef<number>(0);
-  const lastLogTimeRef = useRef<number>(0);
   const pendingPageRef = useRef<number | null>(null);
 
   // Fade out → swap page → fade in. Used for all navigation.
@@ -164,23 +165,6 @@ function Reader() {
     );
   }, [activeWordIdx, sentenceRanges]);
 
-  // Load Whisper words for the current page
-  useEffect(() => {
-    if (currentPage < 0 || currentPage >= totalPages) return;
-    const pageTimings = (timestampData.pages as { page: number; words: WordTiming[] }[])
-      .find((p) => p.page === currentPage + 1);
-    if (pageTimings && pageTimings.words.length > 0) {
-      whisperWordsRef.current = pageTimings.words;
-      whisperDurationRef.current = Math.max(...pageTimings.words.map((w) => w.end));
-      console.log(`[highlight] page ${currentPage + 1} — whisper duration: ${whisperDurationRef.current.toFixed(3)}s, ${pageTimings.words.length} words`);
-      console.log("[highlight] first 3 whisper words:", pageTimings.words.slice(0, 3));
-    } else {
-      whisperWordsRef.current = [];
-      whisperDurationRef.current = 0;
-    }
-    setActiveWordIdx(-1);
-  }, [currentPage]);
-
   // Stop audio when the page changes (unless we're auto-advancing)
   useEffect(() => {
     if (rafRef.current !== null) cancelAnimationFrame(rafRef.current);
@@ -191,57 +175,36 @@ function Reader() {
     if (!autoAdvancing.current) {
       setAudioState("idle");
       setActiveWordIdx(-1);
+      wordsRef.current = [];
     }
   }, [currentPage]);
 
-  const fetchAudioUrl = useCallback(async (pageIndex: number, pageText: string): Promise<string> => {
+  const fetchPageAudio = useCallback(async (pageIndex: number): Promise<{ url: string; words: WordTiming[] }> => {
     const res = await fetch("/api/tts", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ text: pageText, pageNumber: pageIndex + 1, name: childName, gender }),
+      body: JSON.stringify({ pageNumber: pageIndex + 1, name: childName, gender }),
     });
     if (!res.ok) throw new Error(`TTS request failed: ${res.status}`);
-    const { url } = await res.json();
+    const { url, words } = await res.json();
     if (!url) throw new Error("No URL returned from TTS API");
-    return url;
+    return { url, words: Array.isArray(words) ? words : [] };
   }, [childName, gender]);
 
-  const playPage = useCallback(async (pageIndex: number, pageText: string) => {
+  const playPage = useCallback(async (pageIndex: number) => {
     setAudioState("loading");
 
     try {
-      const url = await fetchAudioUrl(pageIndex, pageText);
+      const { url, words } = await fetchPageAudio(pageIndex);
+      wordsRef.current = words;
 
       const audio = new Audio(url);
       audioRef.current = audio;
 
-      audio.addEventListener("loadedmetadata", () => {
-        console.log(`[highlight] audio duration: ${audio.duration.toFixed(3)}s, whisper duration: ${whisperDurationRef.current.toFixed(3)}s, ratio: ${(audio.duration / (whisperDurationRef.current || 1)).toFixed(4)}`);
-      });
-
-      lastLogTimeRef.current = 0;
-
-      // Poll at ~60fps via rAF. Scale currentTime proportionally onto the
-      // Whisper timeline so duration mismatches between ElevenLabs and Whisper
-      // are corrected, then look up the active word purely by timestamp.
+      // Poll at ~60fps via rAF. Timings are exact for this audio file
+      // (generated together by ElevenLabs), so currentTime maps directly.
       const tick = () => {
-        const words = whisperWordsRef.current;
-        const actualDuration = audio.duration;
-        const whisperDuration = whisperDurationRef.current;
-
-        const scaledT =
-          actualDuration > 0 && whisperDuration > 0
-            ? (audio.currentTime / actualDuration) * whisperDuration
-            : audio.currentTime;
-
-        setActiveWordIdx(activeIndexAt(words, scaledT));
-
-        const now = performance.now();
-        if (now - lastLogTimeRef.current >= 500) {
-          console.log(`[highlight] currentTime: ${audio.currentTime.toFixed(3)}s  scaledT: ${scaledT.toFixed(3)}s  activeWord: ${activeIndexAt(words, scaledT)}`);
-          lastLogTimeRef.current = now;
-        }
-
+        setActiveWordIdx(activeIndexAt(wordsRef.current, audio.currentTime));
         rafRef.current = requestAnimationFrame(tick);
       };
       rafRef.current = requestAnimationFrame(tick);
@@ -273,18 +236,13 @@ function Reader() {
       autoAdvancing.current = false;
       setAudioState("error");
     }
-  }, [fetchAudioUrl, totalPages, navigateToPage, startCurtain]);
+  }, [fetchPageAudio, totalPages, navigateToPage, startCurtain]);
 
   // When the page changes due to auto-advance, immediately play the new page
   useEffect(() => {
     if (autoAdvancing.current && currentPage >= 0 && currentPage < totalPages) {
       autoAdvancing.current = false;
-      const pageText = replaceName(
-        pageTextFor(pages[currentPage], gender),
-        childName,
-        storyData.namePlaceholder
-      );
-      playPage(currentPage, pageText);
+      playPage(currentPage);
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentPage]);
@@ -300,8 +258,8 @@ function Reader() {
       setAudioState("playing");
       return;
     }
-    playPage(currentPage, text);
-  }, [audioState, currentPage, text, playPage]);
+    playPage(currentPage);
+  }, [audioState, currentPage, playPage]);
 
   const goNext = useCallback(() => {
     if (isCover || isEnd) return;
@@ -329,7 +287,6 @@ function Reader() {
 
   const isFirst = currentPage === 0;
   const isLast = isEnd;
-  const hasTimings = !isCover && !isEnd && whisperWordsRef.current.length > 0;
 
   return (
     <div className="h-[100dvh] bg-cream flex flex-col overflow-hidden" style={{ fontFamily: "var(--font-plus-jakarta), sans-serif" }}>
@@ -562,8 +519,7 @@ function Reader() {
                 textAlign: "center",
               }}
             >
-              {hasTimings ? (
-                sentenceRanges.map((range, sIdx) => {
+              {sentenceRanges.map((range, sIdx) => {
                   const isActiveSentence = sIdx === activeSentenceIdx;
                   return (
                     <span
@@ -613,10 +569,7 @@ function Reader() {
                       })}
                     </span>
                   );
-                })
-              ) : (
-                text
-              )}
+                })}
             </p>
 
             {/* Play / Pause button */}

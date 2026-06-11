@@ -1,10 +1,22 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
+import storyData from "@/data/story.json";
 
 const BUCKET = "audio";
+// v2: audio generated via the with-timestamps endpoint with prosody context
+// (previous_text/next_text) and higher stability. Word timings are stored
+// next to each mp3 so highlighting is exact — no Whisper, no scaling.
+const CACHE_VERSION = "v2";
 
 const DEFAULT_NAME = "Олег";
-const DEFAULT_GENDER = "m";
+const VOICE_ID = "N8lIVPsFkvOoqev5Csxo";
+
+const VOICE_SETTINGS = {
+  stability: 0.7,
+  similarity_boost: 0.75,
+  style: 0,
+  use_speaker_boost: true,
+};
 
 const CYRILLIC_TO_LATIN: Record<string, string> = {
   а: "a", б: "b", в: "v", г: "g", д: "d", е: "e", ё: "yo", ж: "zh",
@@ -27,40 +39,105 @@ function nameSlug(name: string): string {
   return out;
 }
 
-// The original Олег narration lives at the legacy path — keep serving it
-// from there so it is never regenerated.
-function storageDir(name: string, gender: string): string {
-  if (name === DEFAULT_NAME && gender === DEFAULT_GENDER) return "firebird";
-  return `firebird/${nameSlug(name)}-${gender}`;
+function replaceName(text: string, name: string): string {
+  return text.split(storyData.namePlaceholder).join(name);
+}
+
+// Must match the reader's text derivation exactly — the reader tokenises the
+// same string, so word timings line up 1:1 with rendered tokens.
+function pageText(pageIndex: number, name: string, gender: "m" | "f"): string {
+  const page = storyData.pages[pageIndex] as { text: string; textF?: string };
+  const raw = gender === "f" && page.textF ? page.textF : page.text;
+  return replaceName(raw, name);
+}
+
+export interface WordTiming {
+  word: string;
+  start: number | null; // null — punctuation-only token, never highlighted
+  end: number | null;
+}
+
+interface Alignment {
+  characters: string[];
+  character_start_times_seconds: number[];
+  character_end_times_seconds: number[];
+}
+
+// Split text on whitespace (same as the reader) and map each token to the
+// time range of its characters. Tokens with no letters or digits (e.g. a
+// standalone em dash) get null timings so they are skipped by highlighting.
+function buildWordTimings(text: string, alignment: Alignment): WordTiming[] {
+  const chars = alignment.characters;
+  const starts = alignment.character_start_times_seconds;
+  const ends = alignment.character_end_times_seconds;
+
+  // The alignment is 1:1 with the input text for this endpoint, but guard
+  // against drift: walk both sequences and match characters in order.
+  const timings: WordTiming[] = [];
+  let ci = 0;
+
+  const tokens = text.split(/\s+/).filter(Boolean);
+  let cursor = 0;
+
+  for (const token of tokens) {
+    const tokenStartInText = text.indexOf(token, cursor);
+    const tokenEndInText = tokenStartInText + token.length;
+    cursor = tokenEndInText;
+
+    // Advance ci to the alignment position of tokenStartInText. When the
+    // alignment matches the text exactly (the normal case) indexes coincide.
+    if (chars.length === text.length) {
+      ci = tokenStartInText;
+    } else {
+      // Fallback: skip whitespace entries until the next non-space char.
+      while (ci < chars.length && /\s/.test(chars[ci])) ci++;
+    }
+
+    const first = ci;
+    const last = Math.min(ci + token.length, chars.length) - 1;
+    ci = last + 1;
+
+    const isWord = /[A-Za-zА-Яа-яЁё0-9]/.test(token);
+    timings.push({
+      word: token,
+      start: isWord && first < starts.length ? starts[first] : null,
+      end: isWord && last < ends.length ? ends[last] : null,
+    });
+  }
+
+  return timings;
 }
 
 export async function POST(req: NextRequest) {
   const body = await req.json();
-  const { text, pageNumber } = body;
-  const name: string = typeof body.name === "string" && body.name.trim() ? body.name.trim() : DEFAULT_NAME;
-  const gender: string = body.gender === "f" ? "f" : "m";
+  const pageNumber: number = body.pageNumber;
+  const name: string =
+    typeof body.name === "string" && body.name.trim()
+      ? body.name.trim().split(/\s+/)[0].slice(0, 30)
+      : DEFAULT_NAME;
+  const gender: "m" | "f" = body.gender === "f" ? "f" : "m";
 
-  // Startup diagnostics — log config presence without exposing values
   console.log("[tts] handler invoked", {
     pageNumber,
-    textLength: typeof text === "string" ? text.length : null,
+    name,
+    gender,
     hasSupabaseUrl: !!process.env.NEXT_PUBLIC_SUPABASE_URL,
     hasSupabaseKey: !!process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY,
     hasElevenLabsKey: !!process.env.ELEVENLABS_API_KEY,
-    supabaseUrl:    process.env.NEXT_PUBLIC_SUPABASE_URL ?? "(not set)",
   });
 
-  if (!text || typeof text !== "string") {
-    return NextResponse.json({ error: "text is required" }, { status: 400 });
-  }
-  if (typeof pageNumber !== "number") {
-    return NextResponse.json({ error: "pageNumber is required" }, { status: 400 });
+  if (
+    typeof pageNumber !== "number" ||
+    pageNumber < 1 ||
+    pageNumber > storyData.pages.length
+  ) {
+    return NextResponse.json({ error: "pageNumber is invalid" }, { status: 400 });
   }
 
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
   const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
   if (!supabaseUrl || !supabaseKey) {
-    console.error("[tts] Supabase env vars missing", { hasSupabaseUrl: !!supabaseUrl, hasSupabaseKey: !!supabaseKey });
+    console.error("[tts] Supabase env vars missing");
     return NextResponse.json({ error: "Supabase env vars are not configured" }, { status: 500 });
   }
   if (!process.env.ELEVENLABS_API_KEY) {
@@ -69,38 +146,48 @@ export async function POST(req: NextRequest) {
   }
 
   const supabase = createClient(supabaseUrl, supabaseKey);
-  const dir = storageDir(name, gender);
-  const path = `${dir}/page-${pageNumber}.mp3`;
+  const dir = `firebird/${CACHE_VERSION}/${nameSlug(name)}-${gender}`;
+  const audioPath = `${dir}/page-${pageNumber}.mp3`;
+  const timingsPath = `${dir}/page-${pageNumber}.json`;
+
+  const pageIndex = pageNumber - 1;
+  const text = pageText(pageIndex, name, gender);
 
   try {
-    // 1. Check whether the file already exists in storage
-    console.log("[tts] checking storage for existing file", { path });
+    // 1. Cached? Both the audio and its timings must exist.
     const { data: existing, error: listError } = await supabase.storage
       .from(BUCKET)
-      .list(dir, { search: `page-${pageNumber}.mp3` });
+      .list(dir);
 
     if (listError) {
-      console.error("[tts] Supabase list error", {
-        message: listError.message,
-        name:    (listError as { name?: string }).name,
-      });
+      console.error("[tts] Supabase list error", { message: listError.message });
       return NextResponse.json({ error: "Failed to check storage" }, { status: 500 });
     }
 
-    const alreadyStored = existing && existing.some((f) => f.name === `page-${pageNumber}.mp3`);
-    console.log("[tts] storage check result", { alreadyStored, filesFound: existing?.length ?? 0 });
-
-    if (alreadyStored) {
-      const { data: urlData } = supabase.storage.from(BUCKET).getPublicUrl(path);
-      console.log("[tts] returning cached URL", { url: urlData.publicUrl });
-      return NextResponse.json({ url: urlData.publicUrl });
+    const names = new Set((existing ?? []).map((f) => f.name));
+    if (names.has(`page-${pageNumber}.mp3`) && names.has(`page-${pageNumber}.json`)) {
+      const { data: timingsBlob, error: dlError } = await supabase.storage
+        .from(BUCKET)
+        .download(timingsPath);
+      if (!dlError && timingsBlob) {
+        const words: WordTiming[] = JSON.parse(await timingsBlob.text());
+        const { data: urlData } = supabase.storage.from(BUCKET).getPublicUrl(audioPath);
+        console.log("[tts] returning cached audio + timings", { audioPath });
+        return NextResponse.json({ url: urlData.publicUrl, words });
+      }
+      console.warn("[tts] cached timings unreadable — regenerating", { timingsPath });
     }
 
-    // 2. Not stored yet — generate via ElevenLabs TTS
-    const elevenUrl = "https://api.elevenlabs.io/v1/text-to-speech/N8lIVPsFkvOoqev5Csxo";
-    console.log("[tts] generating audio via ElevenLabs TTS", { pageNumber, url: elevenUrl });
+    // 2. Generate with character-level timestamps. previous_text/next_text
+    // give the model prosody context so pace and tone stay consistent
+    // across page boundaries.
+    const previousText = pageIndex > 0 ? pageText(pageIndex - 1, name, gender) : undefined;
+    const nextText =
+      pageIndex < storyData.pages.length - 1 ? pageText(pageIndex + 1, name, gender) : undefined;
+
+    console.log("[tts] generating via ElevenLabs with-timestamps", { pageNumber, name, gender });
     const elevenResp = await fetch(
-      elevenUrl,
+      `https://api.elevenlabs.io/v1/text-to-speech/${VOICE_ID}/with-timestamps`,
       {
         method: "POST",
         headers: {
@@ -110,7 +197,9 @@ export async function POST(req: NextRequest) {
         body: JSON.stringify({
           text,
           model_id: "eleven_multilingual_v2",
-          voice_settings: { stability: 0.5, similarity_boost: 0.75 },
+          voice_settings: VOICE_SETTINGS,
+          previous_text: previousText,
+          next_text: nextText,
         }),
       }
     );
@@ -121,42 +210,50 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "ElevenLabs TTS failed" }, { status: 500 });
     }
 
-    const buffer = Buffer.from(await elevenResp.arrayBuffer());
-    console.log("[tts] ElevenLabs generation complete", { bufferBytes: buffer.length });
+    const payload = (await elevenResp.json()) as {
+      audio_base64: string;
+      alignment: Alignment | null;
+    };
 
-    // 3. Upload to Supabase Storage
-    console.log("[tts] uploading to Supabase Storage", { path });
-    const { error: uploadError } = await supabase.storage
-      .from(BUCKET)
-      .upload(path, buffer, {
-        contentType: "audio/mpeg",
-        cacheControl: "31536000", // 1 year
-        upsert: false,
-      });
-
-    if (uploadError) {
-      // If another request beat us to it (race), that's fine — just return the URL
-      if (uploadError.message !== "The resource already exists") {
-        console.error("[tts] Supabase upload error", {
-          message: uploadError.message,
-          name:    (uploadError as { name?: string }).name,
-        });
-        return NextResponse.json({ error: "Failed to store audio" }, { status: 500 });
-      }
-      console.log("[tts] upload skipped — file already exists (race condition), returning URL");
-    } else {
-      console.log("[tts] upload successful", { path });
+    if (!payload.audio_base64 || !payload.alignment) {
+      console.error("[tts] ElevenLabs response missing audio or alignment");
+      return NextResponse.json({ error: "ElevenLabs returned incomplete data" }, { status: 500 });
     }
 
-    const { data: urlData } = supabase.storage.from(BUCKET).getPublicUrl(path);
-    console.log("[tts] returning new URL", { url: urlData.publicUrl });
-    return NextResponse.json({ url: urlData.publicUrl });
+    const audioBuffer = Buffer.from(payload.audio_base64, "base64");
+    const words = buildWordTimings(text, payload.alignment);
+    console.log("[tts] generated", {
+      pageNumber,
+      audioBytes: audioBuffer.length,
+      tokens: words.length,
+    });
 
+    // 3. Store audio + timings (race-tolerant: another request may have won)
+    const uploads = await Promise.all([
+      supabase.storage.from(BUCKET).upload(audioPath, audioBuffer, {
+        contentType: "audio/mpeg",
+        cacheControl: "31536000",
+        upsert: false,
+      }),
+      supabase.storage.from(BUCKET).upload(timingsPath, Buffer.from(JSON.stringify(words)), {
+        contentType: "application/json",
+        cacheControl: "31536000",
+        upsert: true,
+      }),
+    ]);
+    for (const { error: uploadError } of uploads) {
+      if (uploadError && uploadError.message !== "The resource already exists") {
+        console.error("[tts] Supabase upload error", { message: uploadError.message });
+        return NextResponse.json({ error: "Failed to store audio" }, { status: 500 });
+      }
+    }
+
+    const { data: urlData } = supabase.storage.from(BUCKET).getPublicUrl(audioPath);
+    return NextResponse.json({ url: urlData.publicUrl, words });
   } catch (err) {
     console.error("[tts] unexpected error", {
       message: err instanceof Error ? err.message : String(err),
-      name:    err instanceof Error ? err.name    : undefined,
-      stack:   err instanceof Error ? err.stack   : undefined,
+      stack: err instanceof Error ? err.stack : undefined,
     });
     return NextResponse.json({ error: "Internal server error" }, { status: 500 });
   }
