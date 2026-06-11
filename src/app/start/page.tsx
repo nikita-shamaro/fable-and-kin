@@ -134,7 +134,7 @@ export default function StartPage() {
                   marginBottom: "8px",
                 }}
               >
-                Готовим сказку для {cleanName}
+                Готовим вашу сказку…
               </p>
               <p className="text-muted text-sm" style={{ marginBottom: "28px" }}>
                 Записываем голос рассказчика…
