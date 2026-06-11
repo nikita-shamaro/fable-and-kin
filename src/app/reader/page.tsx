@@ -135,18 +135,24 @@ function Reader() {
   const pages = storyData.pages;
   const totalPages = pages.length;
 
-  // Preload page illustrations once so pages without artwork render the
-  // text-only layout immediately, with no empty image area flashing.
+  // Preload illustrations (gender-specific set + cover, key 0) so pages
+  // without artwork render the text-only layout immediately, with no empty
+  // image area flashing.
   const [imageAvailable, setImageAvailable] = useState<Record<number, boolean>>({});
+  const imageSrc = useCallback(
+    (key: number) => `/images/${gender}/${key === 0 ? "cover" : `page-${key}`}.png`,
+    [gender]
+  );
   useEffect(() => {
-    pages.forEach((p) => {
+    setImageAvailable({});
+    [0, ...pages.map((p) => p.page)].forEach((key) => {
       const img = new Image();
-      img.onload = () => setImageAvailable((m) => ({ ...m, [p.page]: true }));
-      img.onerror = () => setImageAvailable((m) => ({ ...m, [p.page]: false }));
-      img.src = `/images/page-${p.page}.png`;
+      img.onload = () => setImageAvailable((m) => ({ ...m, [key]: true }));
+      img.onerror = () => setImageAvailable((m) => ({ ...m, [key]: false }));
+      img.src = imageSrc(key);
     });
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [gender]);
   const isCover = currentPage === -1;
   const isEnd = currentPage === totalPages;
   const page = (isCover || isEnd) ? null : pages[currentPage];
@@ -431,7 +437,31 @@ function Reader() {
           </div>
         ) : isCover ? (
           /* ── Cover page ── */
-          <div className="flex-1 flex flex-col items-center justify-center text-center w-full" style={{ padding: "clamp(1.5rem, 4vw, 2.5rem) clamp(1.5rem, 5vw, 3rem)" }}>
+          <>
+            {/* Cover illustration */}
+            {imageAvailable[0] && (
+              <div style={{ flex: "0 0 45%", width: "100%", overflow: "hidden" }}>
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img
+                  src={imageSrc(0)}
+                  alt="Обложка сказки"
+                  style={{
+                    width: "100%",
+                    height: "100%",
+                    objectFit: "cover",
+                    display: "block",
+                  }}
+                />
+              </div>
+            )}
+
+            <div
+              className="flex flex-col items-center justify-center text-center w-full"
+              style={{
+                flex: imageAvailable[0] ? "0 0 55%" : "1",
+                padding: "clamp(1.5rem, 4vw, 2.5rem) clamp(1.5rem, 5vw, 3rem)",
+              }}
+            >
             <p
               className="text-muted mb-3 tracking-widest uppercase"
               style={{
@@ -445,11 +475,12 @@ function Reader() {
             </p>
 
             <h1
-              className="text-ink mb-8 leading-tight"
+              className="text-ink leading-tight"
               style={{
                 fontFamily: "var(--font-fraunces), serif",
                 fontWeight: 300,
                 fontSize: "clamp(1.75rem, 6vw, 2.75rem)",
+                marginBottom: imageAvailable[0] ? "1.25rem" : "2rem",
               }}
             >
               {replaceName(storyData.title, childName, storyData.namePlaceholder)}
@@ -457,12 +488,12 @@ function Reader() {
 
             {/* Amber divider */}
             <div
-              className="mb-10"
               style={{
                 width: "48px",
                 height: "1px",
                 backgroundColor: "#C47B45",
                 opacity: 0.6,
+                marginBottom: imageAvailable[0] ? "1.5rem" : "2.5rem",
               }}
             />
 
@@ -479,7 +510,8 @@ function Reader() {
             >
               Начать читать
             </button>
-          </div>
+            </div>
+          </>
         ) : (
           /* ── Story pages ── */
           <>
@@ -488,7 +520,7 @@ function Reader() {
               <div style={{ flex: "0 0 45%", width: "100%", overflow: "hidden" }}>
                 {/* eslint-disable-next-line @next/next/no-img-element */}
                 <img
-                  src={`/images/page-${page.page}.png`}
+                  src={imageSrc(page.page)}
                   alt={`Иллюстрация к странице ${page.page}`}
                   style={{
                     width: "100%",
